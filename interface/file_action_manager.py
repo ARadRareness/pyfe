@@ -1,7 +1,7 @@
 import shutil
 from PySide6.QtWidgets import QMessageBox, QMenu, QInputDialog
 from PySide6.QtGui import QDesktopServices, QAction
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, QSettings
 import os
 from send2trash import send2trash
 from .file_conversion.epub.epub_manager import EpubManager
@@ -12,6 +12,7 @@ from .file_conversion.text.text_manager import TextManager
 class FileActionManager:
     def __init__(self, app):
         self.app = app
+        self.settings = QSettings("ARadRareness", "PythonFileExplorer")
         self.special_interactions = {}
         self.epub_manager = EpubManager(app)
         self.audio_manager = AudioManager(app)
@@ -133,6 +134,14 @@ class FileActionManager:
             _, file_extension = os.path.splitext(file_name)
             if file_extension.lower() in self.special_interactions:
                 for interaction in self.special_interactions[file_extension.lower()]:
+                    # Check if the action should be shown based on AI mode
+                    if interaction.get(
+                        "ai_only", False
+                    ) == True and not self.settings.value(
+                        "enable_ai", False, type=bool
+                    ):
+                        continue
+
                     action = QAction(interaction["name"], self.app)
                     if "icon" in interaction:
                         action.setIcon(interaction["icon"])

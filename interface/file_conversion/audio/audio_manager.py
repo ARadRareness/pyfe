@@ -14,6 +14,7 @@ class AudioManager:
                 "name": "Convert to text",
                 "action": self.convert_audio_to_text,
                 "icon": self.app.icon_mapper.text_file_icon,
+                "ai_only": True,
             }
         ]
 
