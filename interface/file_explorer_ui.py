@@ -24,6 +24,7 @@ from PySide6.QtCore import (
     QDir,
     QUrl,
     QFileInfo,
+    QSortFilterProxyModel,
 )
 
 import os
@@ -56,6 +57,15 @@ class FileExplorerUI(QMainWindow):
 
         self.navigation_manager.path_changed.connect(self.update_view)
         self.init_interface()
+
+        self.model = QStandardItemModel()
+        self.proxy_model = QSortFilterProxyModel(self)
+        self.proxy_model.setSourceModel(self.model)
+        self.tree_view.setModel(self.proxy_model)
+
+        # Set default sorting
+        self.tree_view.sortByColumn(0, Qt.AscendingOrder)
+        self.proxy_model.setSortRole(Qt.UserRole)
 
         self.update_view()
 
@@ -96,8 +106,6 @@ class FileExplorerUI(QMainWindow):
 
     def create_tree_view(self):
         self.tree_view = QTreeView()
-        self.model = QStandardItemModel()
-        self.tree_view.setModel(self.model)
         self.tree_view.setUniformRowHeights(True)
         self.tree_view.header().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.tree_view.setItemDelegate(NoHighlightDelegate(self.tree_view))
@@ -106,6 +114,9 @@ class FileExplorerUI(QMainWindow):
         self.tree_view.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.tree_view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree_view.customContextMenuRequested.connect(self.show_context_menu)
+
+        self.tree_view.setSortingEnabled(True)
+        self.tree_view.header().setSortIndicator(0, Qt.AscendingOrder)
 
     def connect_signals(self):
         self.toolbar_manager.connect_signals(self.navigation_manager)
@@ -126,9 +137,20 @@ class FileExplorerUI(QMainWindow):
         self.clipboard = []
         for index in self.tree_view.selectedIndexes():
             if index.column() == 0:  # Only process the first column
-                item = self.model.itemFromIndex(index)
-                file_path = os.path.join(self.current_path, item.text())
-                self.clipboard.append(file_path)
+                source_index = self.proxy_model.mapToSource(index)
+                item = self.model.itemFromIndex(source_index)
+                if item:
+                    file_path = os.path.join(self.current_path, item.text())
+                    self.clipboard.append(file_path)
+                else:
+                    print(
+                        f"Warning: Invalid item at index {index.row()}, {index.column()}"
+                    )
+
+        if not self.clipboard:
+            print("No valid items selected for copying")
+        else:
+            print(f"Copied {len(self.clipboard)} item(s) to clipboard")
 
     def paste_clipboard(self):
         files_copied = file_actions.copy_files(self.clipboard, self.current_path)
@@ -171,18 +193,11 @@ class FileExplorerUI(QMainWindow):
         self.current_path = self.navigation_manager.current_path
         self.toolbar_manager.update_address_bar(self.current_path)
 
-        # Only add ".." if there's a parent directory
-        if self.navigation_manager.can_go_up():
-            up_item = QStandardItem("..")
-            icon_path = os.path.join(self.base_dir, "icons", "folder.png")
-            up_item.setIcon(QIcon(icon_path))
-            self.model.appendRow(
-                [up_item, QStandardItem(), QStandardItem(), QStandardItem()]
-            )
-
         self.load_directory_contents()
 
         self.update_navigation_buttons()
+
+        self.proxy_model.sort(0, Qt.AscendingOrder)
 
     def load_directory_contents(self):
         directory = QDir(self.current_path)
@@ -190,7 +205,7 @@ class FileExplorerUI(QMainWindow):
         files = []
 
         for file_info in directory.entryInfoList():
-            if file_info.fileName() in [".", ".."]:
+            if file_info.fileName() in (".", ".."):
                 continue
 
             size_kb = math.ceil(file_info.size() / 1024)
@@ -208,35 +223,48 @@ class FileExplorerUI(QMainWindow):
             else:
                 files.append(item_data)
 
-        # Process folders first
+        # Add ".." only if there's a parent directory
+        if self.navigation_manager.can_go_up():
+            parent_data = ["..", "", "File folder", "", True]
+            self.add_file_item(parent_data, True, is_parent=True)
+
+        # Process folders
         for folder in folders:
             self.add_file_item(folder, True)
 
-        # Then process files
+        # Process files
         for file in files:
             self.add_file_item(file, False)
 
-    def add_file_item(self, file_data, is_dir):
+    def add_file_item(self, file_data, is_dir, is_parent=False):
         name, date, file_type, size, _ = file_data
         name_item = QStandardItem(name)
-        print(f"{name}")
-
         name_item.setIcon(
             self.icon_mapper.get_icon(os.path.join(self.current_path, name))
         )
 
-        self.model.appendRow(
-            [
-                name_item,
-                QStandardItem(date),
-                QStandardItem(file_type),
-                QStandardItem(size),
-            ]
+        # Set custom sort role data
+        name_item.setData(0 if is_parent else (1 if is_dir else 2), Qt.UserRole)
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
         )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
 
     def on_double_click(self, index):
         if QApplication.mouseButtons() == Qt.LeftButton:
-            item = self.model.itemFromIndex(index)
+            # Convert the proxy model index to the source model index
+            source_index = self.proxy_model.mapToSource(index)
+            item = self.model.itemFromIndex(source_index)
             if item:
                 file_name = item.text()
                 if file_name == "..":
@@ -295,9 +323,12 @@ class FileExplorerUI(QMainWindow):
             self.navigation_manager.navigate_to(new_path)
 
     def show_context_menu(self, position):
-        index = self.tree_view.indexAt(position)
-        if index.isValid():
-            item = self.model.itemFromIndex(index)
+        # Convert the position to an index in the proxy model
+        proxy_index = self.tree_view.indexAt(position)
+        if proxy_index.isValid():
+            # Map the proxy index to the source model index
+            source_index = self.proxy_model.mapToSource(proxy_index)
+            item = self.model.itemFromIndex(source_index)
             file_name = item.text()
             file_path = os.path.join(self.current_path, file_name)
 
@@ -305,8 +336,9 @@ class FileExplorerUI(QMainWindow):
             if file_name == "..":
                 return
 
+            context_menu = QMenu(self)
+
             if os.path.isdir(file_path):
-                context_menu = QMenu(self)
                 star_action = QAction("Star folder", self)
                 star_action.triggered.connect(lambda: self.star_folder(file_path))
                 context_menu.addAction(star_action)
@@ -315,8 +347,24 @@ class FileExplorerUI(QMainWindow):
                 star_action.setEnabled(
                     not self.favorites_manager.is_folder_in_favorites(file_path)
                 )
+            else:
+                # Add actions for files here
+                open_action = QAction("Open", self)
+                open_action.triggered.connect(
+                    lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
+                )
+                context_menu.addAction(open_action)
 
-                context_menu.exec(self.tree_view.viewport().mapToGlobal(position))
+            # Add common actions for both files and folders
+            copy_action = QAction("Copy", self)
+            copy_action.triggered.connect(self.copy_clipboard)
+            context_menu.addAction(copy_action)
+
+            delete_action = QAction("Delete", self)
+            delete_action.triggered.connect(self.delete_selected)
+            context_menu.addAction(delete_action)
+
+            context_menu.exec(self.tree_view.viewport().mapToGlobal(position))
 
     def star_folder(self, folder_path):
         self.favorites_manager.star_folder(folder_path)

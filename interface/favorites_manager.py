@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QListView
+from PySide6.QtWidgets import QListView, QMenu, QMessageBox
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QBrush, QColor
 from PySide6.QtCore import Qt, QSize, QDir
 import os
@@ -13,6 +13,8 @@ class FavoritesManager:
         self.favorites_view.setModel(self.favorites_model)
         self.favorites_view.setEditTriggers(QListView.NoEditTriggers)
         self.favorites_view.setSelectionMode(QListView.NoSelection)
+        self.favorites_view.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.favorites_view.customContextMenuRequested.connect(self.show_context_menu)
         self.populate_favorites()
         self.add_favorites_delimiter()
 
@@ -90,6 +92,34 @@ class FavoritesManager:
         if not self.is_folder_in_favorites(folder_path):
             folder_name = os.path.basename(folder_path)
             self.add_favorite_item(folder_name, folder_path, "starred")
+
+    def show_context_menu(self, position):
+        index = self.favorites_view.indexAt(position)
+        if not index.isValid():
+            return
+
+        item = self.favorites_model.itemFromIndex(index)
+        if item.data(Qt.UserRole + 1) == "starred":
+            menu = QMenu()
+            remove_action = menu.addAction("Remove")
+            action = menu.exec_(self.favorites_view.viewport().mapToGlobal(position))
+
+            if action == remove_action:
+                self.confirm_remove_favorite(item)
+
+    def confirm_remove_favorite(self, item):
+        folder_name = item.text()
+        msg_box = QMessageBox()
+        msg_box.setIcon(QMessageBox.Question)
+        msg_box.setText(f"Do you want to remove {folder_name} from favorites?")
+        msg_box.setWindowTitle("Remove Favorite")
+        msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+
+        if msg_box.exec_() == QMessageBox.Yes:
+            self.remove_favorite(item)
+
+    def remove_favorite(self, item):
+        self.favorites_model.removeRow(item.row())
 
     def get_view(self):
         return self.favorites_view
