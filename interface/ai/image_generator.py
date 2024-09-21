@@ -136,6 +136,7 @@ class ImageGenerator:
 
             self.generate_button.clicked.connect(self.on_generate)
             self.save_button.clicked.connect(self.on_save)
+            cancel_button.clicked.connect(self.dialog.reject)
             self.dialog.finished.connect(self.on_dialog_closed)
 
         self.current_path = current_path
