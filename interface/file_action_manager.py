@@ -6,6 +6,7 @@ import os
 from send2trash import send2trash
 from .file_conversion.epub.epub_manager import EpubManager
 from .file_conversion.audio.audio_manager import AudioManager
+from .file_conversion.text.text_manager import TextManager
 
 
 class FileActionManager:
@@ -14,6 +15,7 @@ class FileActionManager:
         self.special_interactions = {}
         self.epub_manager = EpubManager(app)
         self.audio_manager = AudioManager(app)
+        self.text_manager = TextManager(app)
         self.init_interactions()
 
     def init_interactions(self):
@@ -22,7 +24,7 @@ class FileActionManager:
             ".epub": self.epub_manager.get_actions(),
             ".mp3": self.audio_manager.get_actions(),
             ".mp4": self.audio_manager.get_actions(),
-            # Add more audio formats as needed
+            ".txt": self.text_manager.get_actions(),
         }
 
     def delete_files(self, items_to_delete, current_path):

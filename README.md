@@ -1,4 +1,3 @@
-
 📁 Python File Explorer (pyfe) is an alternative filesystem explorer built using Python and PySide6. It provides a modern, customizable interface for browsing and managing files on your computer.
 
 ## 🌟 Features
@@ -11,7 +10,12 @@
 - 🖼️ Custom file icons based on file types
 - ⚡ Keyboard shortcuts for common actions
 - 🔙 Navigation history (back, forward, up)
-- 🎨 AI-powered image generation using DALL-E 3 or custom OpenAI endpoint
+
+## 🧠 AI Features
+Using OpenAI or custom OpenAI-compatible endpoints, pyfe also supports:
+- 🎨 Generating images
+- 🎤 Transcribing audio
+- 🗣️ Creating audio narrations from text files
 
 ## 🛠️ Installation
 
