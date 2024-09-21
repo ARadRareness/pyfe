@@ -10,7 +10,7 @@
   <a href="#usage">Usage</a>
 </p>
 
-📁 pyfe is an alternative filesystem explorer built using Python and PySide6. It provides a modern, customizable interface for browsing and managing files on your computer.
+📁 pyfe (Python File Explorer) is an alternative filesystem explorer built using Python and PySide6. It provides a modern, customizable interface for browsing and managing files on your computer.
 
 ## 🌟 Features
 

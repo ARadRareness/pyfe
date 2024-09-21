@@ -1,3 +1,4 @@
+import os
 from PySide6.QtCore import QObject, QDir, Signal
 
 
@@ -8,7 +9,7 @@ class NavigationManager(QObject):
         super().__init__()
         self.history_backward = []
         self.history_forward = []
-        self.current_path = QDir.rootPath()
+        self.current_path = os.path.normpath(QDir.rootPath())
 
     def navigate_to(self, path):
         if path != self.current_path:
@@ -30,8 +31,8 @@ class NavigationManager(QObject):
             self.path_changed.emit(self.current_path)
 
     def go_up(self):
-        parent_path = QDir(self.current_path).filePath("..")
-        self.navigate_to(QDir(parent_path).absolutePath())
+        parent_path = os.path.normpath(QDir(self.current_path).filePath(".."))
+        self.navigate_to(parent_path)
 
     def can_go_back(self):
         return bool(self.history_backward)

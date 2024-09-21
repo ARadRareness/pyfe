@@ -3,14 +3,12 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLineEdit,
     QTreeView,
     QHeaderView,
     QSplitter,
     QAbstractItemView,
     QMenu,
+    QFileSystemModel,
 )
 from PySide6.QtGui import (
     QStandardItemModel,
@@ -20,9 +18,13 @@ from PySide6.QtGui import (
     QAction,
     QKeySequence,
     QShortcut,
-    QPixmap,
 )
-from PySide6.QtCore import Qt, QDir, QUrl, QFileInfo, QSize
+from PySide6.QtCore import (
+    Qt,
+    QDir,
+    QUrl,
+    QFileInfo,
+)
 
 import os
 import math
@@ -30,8 +32,9 @@ import math
 from interface import file_actions
 from interface.custom_widgets import NoHighlightDelegate
 from interface.icon_mapper import IconMapper
-from interface.navigation import NavigationManager
+from interface.navigation_manager import NavigationManager
 from interface.favorites_manager import FavoritesManager
+from interface.toolbar_manager import ToolbarManager  # Add this import
 
 
 class FileExplorerUI(QMainWindow):
@@ -43,9 +46,13 @@ class FileExplorerUI(QMainWindow):
         self.base_dir = base_dir
         self.set_window_icon()
 
+        file_system_model = QFileSystemModel()
+        file_system_model.setRootPath("")
+
         self.icon_mapper = IconMapper(self.base_dir)
         self.navigation_manager = NavigationManager()
         self.favorites_manager = FavoritesManager(self.base_dir)
+        self.toolbar_manager = ToolbarManager(self, self.base_dir, file_system_model)
 
         self.navigation_manager.path_changed.connect(self.update_view)
         self.init_interface()
@@ -58,8 +65,8 @@ class FileExplorerUI(QMainWindow):
     def init_interface(self):
         main_layout = QVBoxLayout()
 
-        # Create toolbar
-        toolbar = self.create_toolbar()
+        # Create toolbar using ToolbarManager
+        toolbar = self.toolbar_manager.create_toolbar()
         main_layout.addLayout(toolbar)
 
         # Create splitter to hold the left and right views
@@ -87,31 +94,6 @@ class FileExplorerUI(QMainWindow):
         # Connect signals
         self.connect_signals()
 
-    def create_toolbar(self):
-        toolbar = QHBoxLayout()
-        self.back_btn = QPushButton()
-        self.forward_btn = QPushButton()
-        self.up_btn = QPushButton()
-        self.refresh_btn = QPushButton()
-        self.address_bar = QLineEdit()
-        self.search_bar = QLineEdit()
-        self.search_bar.setPlaceholderText("Search")
-
-        # Set icons for buttons
-        self.set_button_icon(self.back_btn, "back.png")
-        self.set_button_icon(self.forward_btn, "forward.png")
-        self.set_button_icon(self.up_btn, "up.png")
-        self.set_button_icon(self.refresh_btn, "refresh.png")
-
-        toolbar.addWidget(self.back_btn)
-        toolbar.addWidget(self.forward_btn)
-        toolbar.addWidget(self.up_btn)
-        toolbar.addWidget(self.refresh_btn)
-        toolbar.addWidget(self.address_bar)
-        toolbar.addWidget(self.search_bar)
-
-        return toolbar
-
     def create_tree_view(self):
         self.tree_view = QTreeView()
         self.model = QStandardItemModel()
@@ -126,24 +108,13 @@ class FileExplorerUI(QMainWindow):
         self.tree_view.customContextMenuRequested.connect(self.show_context_menu)
 
     def connect_signals(self):
-        self.refresh_btn.clicked.connect(self.update_view)
-        self.address_bar.returnPressed.connect(self.change_directory)
+        self.toolbar_manager.connect_signals(self.navigation_manager)
         self.tree_view.doubleClicked.connect(self.on_double_click)
         self.favorites_manager.get_view().clicked.connect(self.on_favorite_click)
-        self.back_btn.clicked.connect(self.navigation_manager.go_back)
-        self.forward_btn.clicked.connect(self.navigation_manager.go_forward)
-        self.up_btn.clicked.connect(self.navigation_manager.go_up)
 
     def set_window_icon(self):
         icon_path = os.path.join(self.base_dir, "icons", "icon.png")
         self.setWindowIcon(QIcon(icon_path))
-
-    def set_button_icon(self, button, icon_name):
-        icon_path = os.path.join(self.base_dir, "icons", icon_name)
-        icon = QIcon(QPixmap(icon_path))
-        button.setIcon(icon)
-        button.setIconSize(QSize(16, 16))  # Adjust size as needed
-        button.setFixedSize(24, 24)  # Adjust size as needed
 
     def setup_shortcuts(self):
         QShortcut(QKeySequence.Copy, self.tree_view, self.copy_clipboard)
@@ -205,7 +176,7 @@ class FileExplorerUI(QMainWindow):
         )
 
         self.current_path = self.navigation_manager.current_path
-        self.address_bar.setText(self.current_path)
+        self.toolbar_manager.update_address_bar(self.current_path)
 
         self.load_directory_contents()
 
@@ -269,7 +240,9 @@ class FileExplorerUI(QMainWindow):
                 if file_name == "..":
                     self.navigation_manager.go_up()
                 else:
-                    new_path = QDir(self.current_path).filePath(file_name)
+                    new_path = os.path.normpath(
+                        QDir(self.current_path).filePath(file_name)
+                    )
                     file_info = QFileInfo(new_path)
                     if file_info.exists():
                         if file_info.isDir():
@@ -308,12 +281,14 @@ class FileExplorerUI(QMainWindow):
         self.navigate_to(QDir(parent_path).absolutePath())
 
     def update_navigation_buttons(self):
-        self.back_btn.setEnabled(self.navigation_manager.can_go_back())
-        self.forward_btn.setEnabled(self.navigation_manager.can_go_forward())
-        self.up_btn.setEnabled(self.navigation_manager.can_go_up())
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
 
     def change_directory(self):
-        new_path = self.address_bar.text()
+        new_path = self.toolbar_manager.address_bar.text()
         if QDir(new_path).exists():
             self.navigation_manager.navigate_to(new_path)
 
@@ -343,3 +318,8 @@ class FileExplorerUI(QMainWindow):
 
     def star_folder(self, folder_path):
         self.favorites_manager.star_folder(folder_path)
+
+    def filter_view(self):
+        search_text = self.toolbar_manager.get_search_text()
+        # Implement the filtering logic here
+        # For example, you can hide/show items in the tree_view based on the search_text

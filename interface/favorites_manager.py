@@ -17,24 +17,23 @@ class FavoritesManager:
         self.add_favorites_delimiter()
 
     def populate_favorites(self):
+        home_path = os.path.normpath(QDir.homePath())
         favorites = [
-            ("Home", QDir.homePath()),
-            ("Desktop", QDir.homePath() + "/Desktop"),
-            ("Documents", QDir.homePath() + "/Documents"),
-            ("Downloads", QDir.homePath() + "/Downloads"),
-            ("Pictures", QDir.homePath() + "/Pictures"),
-            ("Music", QDir.homePath() + "/Music"),
-            ("Videos", QDir.homePath() + "/Videos"),
-            ("Dropbox", QDir.homePath() + "/Dropbox"),
+            ("Home", home_path),
+            ("Desktop", os.path.join(home_path, "Desktop")),
+            ("Documents", os.path.join(home_path, "Documents")),
+            ("Downloads", os.path.join(home_path, "Downloads")),
+            ("Pictures", os.path.join(home_path, "Pictures")),
+            ("Music", os.path.join(home_path, "Music")),
+            ("Videos", os.path.join(home_path, "Videos")),
+            ("Dropbox", os.path.join(home_path, "Dropbox")),
         ]
 
         if sys.platform == "win32":
             import win32api
 
             drives = win32api.GetLogicalDriveStrings().split("\000")[:-1]
-            favorites.extend(
-                (drive.rstrip("\\"), drive.rstrip("\\")) for drive in drives
-            )
+            favorites.extend((drive.rstrip("\\"), drive) for drive in drives)
 
         for name, path in favorites:
             if os.path.exists(path):
