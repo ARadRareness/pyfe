@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import QListView, QMenu, QMessageBox
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QBrush, QColor
-from PySide6.QtCore import Qt, QSize, QDir
+from PySide6.QtCore import Qt, QSize, QDir, QSettings
 import os
 import sys
 
@@ -15,8 +15,12 @@ class FavoritesManager:
         self.favorites_view.setSelectionMode(QListView.NoSelection)
         self.favorites_view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.favorites_view.customContextMenuRequested.connect(self.show_context_menu)
+
+        self.settings = QSettings("ARadRareness", "PythonFileExplorer")
+
         self.populate_favorites()
         self.add_favorites_delimiter()
+        self.load_starred_folders()
 
     def populate_favorites(self):
         home_path = os.path.normpath(QDir.homePath())
@@ -92,6 +96,7 @@ class FavoritesManager:
         if not self.is_folder_in_favorites(folder_path):
             folder_name = os.path.basename(folder_path)
             self.add_favorite_item(folder_name, folder_path, "starred")
+            self.save_starred_folders()
 
     def show_context_menu(self, position):
         index = self.favorites_view.indexAt(position)
@@ -107,6 +112,11 @@ class FavoritesManager:
             if action == remove_action:
                 self.confirm_remove_favorite(item)
 
+    def is_drive(self, path):
+        if sys.platform == "win32":
+            return os.path.splitdrive(path)[1] == "\\"
+        return False
+
     def confirm_remove_favorite(self, item):
         folder_name = item.text()
         msg_box = QMessageBox()
@@ -119,7 +129,24 @@ class FavoritesManager:
             self.remove_favorite(item)
 
     def remove_favorite(self, item):
-        self.favorites_model.removeRow(item.row())
+        if item.data(Qt.UserRole + 1) == "starred":
+            self.favorites_model.removeRow(item.row())
+            self.save_starred_folders()
 
     def get_view(self):
         return self.favorites_view
+
+    def load_starred_folders(self):
+        starred_folders = self.settings.value("starred_folders", [])
+        for name, path in starred_folders:
+            if os.path.exists(path):
+                self.add_favorite_item(name, path, "starred")
+
+    def save_starred_folders(self):
+        starred_folders = []
+        for row in range(self.favorites_model.rowCount()):
+            item = self.favorites_model.item(row)
+            if item.data(Qt.UserRole + 1) == "starred":
+                starred_folders.append((item.text(), item.data(Qt.UserRole)))
+
+        self.settings.setValue("starred_folders", starred_folders)
