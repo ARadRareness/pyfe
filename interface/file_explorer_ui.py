@@ -35,6 +35,7 @@ from interface.custom_widgets import NoHighlightDelegate
 from interface.icon_mapper import IconMapper
 from interface.navigation_manager import NavigationManager
 from interface.favorites_manager import FavoritesManager
+from interface.system_menu_manager import SystemMenuManager
 from interface.toolbar_manager import ToolbarManager  # Add this import
 
 
@@ -54,6 +55,7 @@ class FileExplorerUI(QMainWindow):
         self.navigation_manager = NavigationManager()
         self.favorites_manager = FavoritesManager(self.base_dir)
         self.toolbar_manager = ToolbarManager(self, self.base_dir, file_system_model)
+        self.system_menu_manager = SystemMenuManager(self)
 
         self.navigation_manager.path_changed.connect(self.update_view)
         self.init_interface()
