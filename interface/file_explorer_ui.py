@@ -16,6 +16,7 @@ from PySide6.QtGui import (
     QDesktopServices,
     QKeySequence,
     QShortcut,
+    QKeyEvent,
 )
 from PySide6.QtCore import (
     Qt,
@@ -350,3 +351,10 @@ class FileExplorerUI(QMainWindow):
         search_text = self.toolbar_manager.get_search_text()
         # Implement the filtering logic here
         # For example, you can hide/show items in the tree_view based on the search_text
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)

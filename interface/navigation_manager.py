@@ -52,3 +52,9 @@ class NavigationManager(QObject):
         # For all other cases, check if the parent is different from the current path
         parent_path = os.path.dirname(self.current_path)
         return parent_path != self.current_path
+
+    def handle_backspace(self):
+        if self.can_go_back():
+            self.go_back()
+            return True
+        return False
