@@ -18,10 +18,11 @@
 - 📂 Dual-pane interface with favorites sidebar
 - 🔍 File search functionality
 - 📌 Customizable favorites with "star folder" option
-- 🗂️ File operations (copy, paste, delete)
+- 🗂️ File operations (new, rename, copy, paste, delete)
 - 🖼️ Custom file icons based on file types
 - ⚡ Keyboard shortcuts for common actions
 - 🔙 Navigation history (back, forward, up)
+- 🎨 AI-powered image generation using DALL-E 3 or custom OpenAI endpoint
 
 ## 🛠️ Installation
 

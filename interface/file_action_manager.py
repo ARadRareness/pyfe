@@ -1,11 +1,9 @@
 import shutil
 from PySide6.QtWidgets import QMessageBox, QMenu, QInputDialog
-from PySide6.QtGui import QDesktopServices
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QAction
+from PySide6.QtCore import QUrl
 import os
 from send2trash import send2trash
-
-from PySide6.QtGui import QAction
 
 
 class FileActionManager:
@@ -99,6 +97,13 @@ class FileActionManager:
                 )
                 context_menu.addAction(open_action)
 
+            # Add rename action
+            rename_action = QAction("Rename", self.app)
+            rename_action.triggered.connect(
+                lambda: self.rename_item(item, current_path)
+            )
+            context_menu.addAction(rename_action)
+
             copy_action = QAction("Copy", self.app)
             copy_action.triggered.connect(self.app.copy_clipboard)
             context_menu.addAction(copy_action)
@@ -110,10 +115,14 @@ class FileActionManager:
             # Add separator before the "New" submenu
             context_menu.addSeparator()
 
-            # Add "New" submenu as the last item
+            # Modify the "New" submenu creation
             new_menu = QMenu("New", context_menu)
-            new_file_action = QAction("File", new_menu)
-            new_folder_action = QAction("Folder", new_menu)
+            new_file_action = QAction(
+                self.app.icon_mapper.text_file_icon, "File", new_menu
+            )
+            new_folder_action = QAction(
+                self.app.icon_mapper.folder_icon, "Folder", new_menu
+            )
             new_menu.addAction(new_file_action)
             new_menu.addAction(new_folder_action)
             context_menu.addMenu(new_menu)
@@ -158,10 +167,12 @@ class FileActionManager:
     def show_empty_context_menu(self, position, tree_view, current_path):
         context_menu = QMenu(self.app)
 
-        # Add "New" submenu
+        # Modify the "New" submenu creation
         new_menu = QMenu("New", context_menu)
-        new_file_action = QAction("File", new_menu)
-        new_folder_action = QAction("Folder", new_menu)
+        new_file_action = QAction(self.app.icon_mapper.text_file_icon, "File", new_menu)
+        new_folder_action = QAction(
+            self.app.icon_mapper.folder_icon, "Folder", new_menu
+        )
         new_menu.addAction(new_file_action)
         new_menu.addAction(new_folder_action)
         context_menu.addMenu(new_menu)
@@ -175,3 +186,19 @@ class FileActionManager:
         # You can add more context menu items here if needed
 
         context_menu.exec(tree_view.viewport().mapToGlobal(position))
+
+    def rename_item(self, item, current_path):
+        old_name = item.text()
+        new_name, ok = QInputDialog.getText(
+            self.app, "Rename", "Enter new name:", text=old_name
+        )
+        if ok and new_name and new_name != old_name:
+            old_path = os.path.join(current_path, old_name)
+            new_path = os.path.join(current_path, new_name)
+            try:
+                os.rename(old_path, new_path)
+                self.app.update_view()  # Add this line to update the view
+                return True
+            except OSError as e:
+                QMessageBox.critical(self.app, "Error", f"Failed to rename: {str(e)}")
+        return False

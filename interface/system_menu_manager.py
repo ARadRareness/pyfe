@@ -18,9 +18,13 @@ class SystemMenuManager:
         file_menu = QMenu("File", self.parent)
         menu_bar.addMenu(file_menu)
 
-        # Add New File and New Folder actions to File menu
-        new_file_action = QAction("New File", self.parent)
-        new_folder_action = QAction("New Folder", self.parent)
+        # Add New File and New Folder actions to File menu with icons
+        new_file_action = QAction(
+            self.parent.icon_mapper.text_file_icon, "New File", self.parent
+        )
+        new_folder_action = QAction(
+            self.parent.icon_mapper.folder_icon, "New Folder", self.parent
+        )
         file_menu.addAction(new_file_action)
         file_menu.addAction(new_folder_action)
 
@@ -39,8 +43,10 @@ class SystemMenuManager:
         # Add a separator after the new actions
         file_menu.addSeparator()
 
-        # Add Generate Image action to File menu
-        self.generate_image_action = QAction("Generate Image", self.parent)
+        # Add Generate Image action to File menu with icon
+        self.generate_image_action = QAction(
+            self.parent.icon_mapper.image_file_icon, "Generate Image", self.parent
+        )
         self.generate_image_action.triggered.connect(self.show_generate_image_dialog)
         file_menu.addAction(self.generate_image_action)
         self.generate_image_action.setVisible(

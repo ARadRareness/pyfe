@@ -136,6 +136,9 @@ class FileExplorerUI(QMainWindow):
         QShortcut(QKeySequence.Paste, self.tree_view, self.paste_clipboard)
         # QShortcut(QKeySequence.Cut, self.tree_view, self.cut_selected)
         QShortcut(QKeySequence.Delete, self.tree_view, self.delete_selected)
+        QShortcut(
+            QKeySequence(Qt.Key_F2), self.tree_view, self.rename_selected
+        )  # Add F2 shortcut
 
     def copy_clipboard(self):
         self.clipboard = []
@@ -329,10 +332,8 @@ class FileExplorerUI(QMainWindow):
             self.navigation_manager.navigate_to(new_path)
 
     def show_context_menu(self, position):
-        print("WOOP")
         index = self.tree_view.indexAt(position)
         if index.isValid():
-            # Existing code for when a file/folder is selected
             self.file_action_manager.show_context_menu(
                 position,
                 self.tree_view,
@@ -342,7 +343,6 @@ class FileExplorerUI(QMainWindow):
                 self.favorites_manager,
             )
         else:
-            # New code for when no file/folder is selected
             self.file_action_manager.show_empty_context_menu(
                 position,
                 self.tree_view,
@@ -360,3 +360,11 @@ class FileExplorerUI(QMainWindow):
                 event.accept()
                 return
         super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
