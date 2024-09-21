@@ -41,4 +41,14 @@ class NavigationManager(QObject):
         return bool(self.history_forward)
 
     def can_go_up(self):
-        return self.current_path != QDir.rootPath()
+        # Handle Windows root paths (e.g., C:\, D:\)
+        if os.name == "nt" and self.current_path.endswith(":\\"):
+            return False
+
+        # Handle Unix-like root path
+        if self.current_path == "/":
+            return False
+
+        # For all other cases, check if the parent is different from the current path
+        parent_path = os.path.dirname(self.current_path)
+        return parent_path != self.current_path

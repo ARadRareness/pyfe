@@ -168,15 +168,17 @@ class FileExplorerUI(QMainWindow):
         for i, size in enumerate(column_sizes[1:], start=1):
             self.tree_view.setColumnWidth(i, size)
 
-        up_item = QStandardItem("..")
-        icon_path = os.path.join(self.base_dir, "icons", "folder.png")
-        up_item.setIcon(QIcon(icon_path))
-        self.model.appendRow(
-            [up_item, QStandardItem(), QStandardItem(), QStandardItem()]
-        )
-
         self.current_path = self.navigation_manager.current_path
         self.toolbar_manager.update_address_bar(self.current_path)
+
+        # Only add ".." if there's a parent directory
+        if self.navigation_manager.can_go_up():
+            up_item = QStandardItem("..")
+            icon_path = os.path.join(self.base_dir, "icons", "folder.png")
+            up_item.setIcon(QIcon(icon_path))
+            self.model.appendRow(
+                [up_item, QStandardItem(), QStandardItem(), QStandardItem()]
+            )
 
         self.load_directory_contents()
 
