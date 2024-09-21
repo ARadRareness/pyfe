@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QSplitter,
     QAbstractItemView,
-    QMenu,
     QFileSystemModel,
 )
 from PySide6.QtGui import (
@@ -15,7 +14,6 @@ from PySide6.QtGui import (
     QStandardItem,
     QIcon,
     QDesktopServices,
-    QAction,
     QKeySequence,
     QShortcut,
 )
@@ -30,7 +28,7 @@ from PySide6.QtCore import (
 import os
 import math
 
-from interface import file_actions
+from interface.file_action_manager import FileActionManager
 from interface.custom_widgets import NoHighlightDelegate
 from interface.icon_mapper import IconMapper
 from interface.navigation_manager import NavigationManager
@@ -56,6 +54,7 @@ class FileExplorerUI(QMainWindow):
         self.favorites_manager = FavoritesManager(self.base_dir)
         self.toolbar_manager = ToolbarManager(self, self.base_dir, file_system_model)
         self.system_menu_manager = SystemMenuManager(self)
+        self.file_action_manager = FileActionManager(self)
 
         self.navigation_manager.path_changed.connect(self.update_view)
         self.init_interface()
@@ -155,7 +154,9 @@ class FileExplorerUI(QMainWindow):
             print(f"Copied {len(self.clipboard)} item(s) to clipboard")
 
     def paste_clipboard(self):
-        files_copied = file_actions.copy_files(self.clipboard, self.current_path)
+        files_copied = self.file_action_manager.copy_files(
+            self.clipboard, self.current_path
+        )
 
         if files_copied:
             self.update_view()
@@ -169,8 +170,8 @@ class FileExplorerUI(QMainWindow):
         rows_to_delete = set(index.row() for index in selected_indexes)
         items_to_delete = [self.model.item(row, 0).text() for row in rows_to_delete]
 
-        files_deleted = file_actions.delete_files(
-            self, items_to_delete, self.current_path
+        files_deleted = self.file_action_manager.delete_files(
+            items_to_delete, self.current_path
         )
 
         if files_deleted:
@@ -325,51 +326,25 @@ class FileExplorerUI(QMainWindow):
             self.navigation_manager.navigate_to(new_path)
 
     def show_context_menu(self, position):
-        # Convert the position to an index in the proxy model
-        proxy_index = self.tree_view.indexAt(position)
-        if proxy_index.isValid():
-            # Map the proxy index to the source model index
-            source_index = self.proxy_model.mapToSource(proxy_index)
-            item = self.model.itemFromIndex(source_index)
-            file_name = item.text()
-            file_path = os.path.join(self.current_path, file_name)
-
-            # Don't show the context menu for ".."
-            if file_name == "..":
-                return
-
-            context_menu = QMenu(self)
-
-            if os.path.isdir(file_path):
-                star_action = QAction("Star folder", self)
-                star_action.triggered.connect(lambda: self.star_folder(file_path))
-                context_menu.addAction(star_action)
-
-                # Disable the action if the folder is already in favorites
-                star_action.setEnabled(
-                    not self.favorites_manager.is_folder_in_favorites(file_path)
-                )
-            else:
-                # Add actions for files here
-                open_action = QAction("Open", self)
-                open_action.triggered.connect(
-                    lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
-                )
-                context_menu.addAction(open_action)
-
-            # Add common actions for both files and folders
-            copy_action = QAction("Copy", self)
-            copy_action.triggered.connect(self.copy_clipboard)
-            context_menu.addAction(copy_action)
-
-            delete_action = QAction("Delete", self)
-            delete_action.triggered.connect(self.delete_selected)
-            context_menu.addAction(delete_action)
-
-            context_menu.exec(self.tree_view.viewport().mapToGlobal(position))
-
-    def star_folder(self, folder_path):
-        self.favorites_manager.star_folder(folder_path)
+        print("WOOP")
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            # Existing code for when a file/folder is selected
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            # New code for when no file/folder is selected
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
 
     def filter_view(self):
         search_text = self.toolbar_manager.get_search_text()

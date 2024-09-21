@@ -52,7 +52,6 @@ class IconMapper:
 
     def get_icon(self, file_path: str):
         if os.path.isdir(file_path):
-            print(f"{file_path} is a directory")
             return self.folder_icon
 
         file_extension = os.path.splitext(file_path)[1].lower()
