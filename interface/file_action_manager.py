@@ -4,11 +4,21 @@ from PySide6.QtGui import QDesktopServices, QAction
 from PySide6.QtCore import QUrl
 import os
 from send2trash import send2trash
+from .file_conversion.epub.epub_manager import EpubManager
 
 
 class FileActionManager:
     def __init__(self, app):
         self.app = app
+        self.special_interactions = {}
+        self.epub_manager = EpubManager(app)
+        self.init_interactions()
+
+    def init_interactions(self):
+        # Define special interactions here
+        self.special_interactions = {
+            ".epub": self.epub_manager.get_actions(),
+        }
 
     def delete_files(self, items_to_delete, current_path):
         files_deleted = []
@@ -112,6 +122,20 @@ class FileActionManager:
             delete_action.triggered.connect(self.app.delete_selected)
             context_menu.addAction(delete_action)
 
+            # Add file-specific actions based on file extension
+            _, file_extension = os.path.splitext(file_name)
+            if file_extension.lower() in self.special_interactions:
+                for interaction in self.special_interactions[file_extension.lower()]:
+                    action = QAction(interaction["name"], self.app)
+                    if "icon" in interaction:
+                        action.setIcon(interaction["icon"])
+                    action.triggered.connect(
+                        lambda checked, f=file_path, a=interaction[
+                            "action"
+                        ]: self.handle_special_interaction(f, a)
+                    )
+                    context_menu.addAction(action)
+
             # Add separator before the "New" submenu
             context_menu.addSeparator()
 
@@ -136,6 +160,11 @@ class FileActionManager:
             )
 
             context_menu.exec(tree_view.viewport().mapToGlobal(position))
+
+    def handle_special_interaction(self, file_path, action):
+        result = action(file_path)
+        if result is True:
+            self.app.update_view()
 
     def create_new_file(self, current_path):
         file_name, ok = QInputDialog.getText(self.app, "New File", "Enter file name:")

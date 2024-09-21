@@ -46,6 +46,11 @@ class IconMapper:
             os.path.join(self.base_dir, "icons", "python_file.png")
         )
         self.pdf_file_icon = QIcon(os.path.join(self.base_dir, "icons", "pdf_file.png"))
+
+        self.book_file_icon = QIcon(
+            os.path.join(self.base_dir, "icons", "book_file.png")
+        )
+
         self.default_icon = QIcon(
             os.path.join(self.base_dir, "icons", "unknown_file.png")
         )
@@ -103,6 +108,16 @@ class IconMapper:
             ".xlsx",
         ]:
             return self.document_file_icon
+        elif file_extension in [
+            ".epub",
+            ".mobi",
+            ".fb2",
+            ".azw",
+            ".lit",
+            ".prc",
+            ".azw3",
+        ]:
+            return self.book_file_icon
         elif file_extension in [".py", ".pyw"]:
             return self.python_file_icon
         elif file_extension in [".ods", ".xls", ".xlsx"]:
