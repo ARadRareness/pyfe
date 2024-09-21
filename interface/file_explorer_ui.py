@@ -36,6 +36,7 @@ from interface.navigation_manager import NavigationManager
 from interface.favorites_manager import FavoritesManager
 from interface.system_menu_manager import SystemMenuManager
 from interface.toolbar_manager import ToolbarManager  # Add this import
+from interface.ai.image_generator import ImageGenerator
 
 
 class FileExplorerUI(QMainWindow):
@@ -56,6 +57,7 @@ class FileExplorerUI(QMainWindow):
         self.toolbar_manager = ToolbarManager(self, self.base_dir, file_system_model)
         self.system_menu_manager = SystemMenuManager(self)
         self.file_action_manager = FileActionManager(self)
+        self.image_generator = ImageGenerator(self)
 
         self.navigation_manager.path_changed.connect(self.update_view)
         self.init_interface()
