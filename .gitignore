@@ -162,3 +162,4 @@ cython_debug/
 #.idea/
 future_features.md
 prompt.txt
+changelog.txt
