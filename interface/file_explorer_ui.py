@@ -355,8 +355,7 @@ class FileExplorerUI(QMainWindow):
         self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
         self.toolbar_manager.update_up_button(can_go_up)
 
-    def change_directory(self):
-        new_path = self.toolbar_manager.address_bar.text()
+    def change_directory(self, new_path):
         if QDir(new_path).exists():
             self.navigation_manager.navigate_to(new_path)
 
