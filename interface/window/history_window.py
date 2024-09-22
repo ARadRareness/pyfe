@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
 )
-from PySide6.QtCore import Qt, QDateTime, QDir
+from PySide6.QtCore import QDir
 
 
 class HistoryWindow(QWidget):
@@ -55,6 +55,16 @@ class HistoryWindow(QWidget):
                     f"The directory '{path}' no longer exists.",
                 )
 
+    def position_window(self):
+        parent_geometry = self.parent.geometry()
+        self.setGeometry(
+            parent_geometry.right(),
+            parent_geometry.top(),
+            self.width(),
+            parent_geometry.height(),
+        )
+
     def showEvent(self, event):
         super().showEvent(event)
         self.update_history()
+        self.position_window()

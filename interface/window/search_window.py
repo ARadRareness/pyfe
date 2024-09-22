@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
 )
-from PySide6.QtCore import Qt, QDir, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal
 import os
 
 
@@ -73,6 +73,9 @@ class SearchWindow(QWidget):
         self.search_thread.result_found.connect(self.add_result)
         self.search_thread.finished.connect(self.search_finished)
         self.search_thread.start()
+        self.activateWindow()  # Activate the window
+        self.raise_()  # Bring the window to the front
+        self.setFocus()  # Set focus to this window
 
     def stop_current_search(self):
         if self.search_thread and self.search_thread.isRunning():
@@ -123,8 +126,18 @@ class SearchWindow(QWidget):
         else:
             super().keyPressEvent(event)
 
+    def position_window(self):
+        parent_geometry = self.parent.geometry()
+        self.setGeometry(
+            parent_geometry.right(),
+            parent_geometry.top(),
+            self.width(),
+            parent_geometry.height(),
+        )
+
     def showEvent(self, event):
         super().showEvent(event)
+        self.position_window()
         self.raise_()
 
     def closeEvent(self, event):
