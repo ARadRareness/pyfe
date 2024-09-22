@@ -17,8 +17,66 @@ class SearchThread(QThread):
     def __init__(self, root_path, query):
         super().__init__()
         self.root_path = root_path
-        self.query = query.lower()
+        self.include_terms, self.exclude_terms = self.parse_query(query)
         self.stop_flag = False
+
+    def parse_query(self, query):
+        include_terms = []
+        exclude_terms = []
+        current_phrase = []
+        in_quotes = False
+        excluding = False
+        for word in query.lower().split():
+            if word.startswith("-"):
+                excluding = True
+                word = word[1:]  # Remove the leading '-'
+
+            if word.startswith('"') and word.endswith('"'):
+                term = word.strip('"')
+                (exclude_terms if excluding else include_terms).append(term)
+                excluding = False
+            elif word.startswith('"'):
+                in_quotes = True
+                current_phrase = [word.strip('"')]
+            elif word.endswith('"'):
+                in_quotes = False
+                current_phrase.append(word.strip('"'))
+                term = " ".join(current_phrase)
+                (exclude_terms if excluding else include_terms).append(term)
+                current_phrase = []
+                excluding = False
+            elif in_quotes:
+                current_phrase.append(word)
+            else:
+                (exclude_terms if excluding else include_terms).append(word)
+                excluding = False
+
+        if current_phrase:
+            term = " ".join(current_phrase)
+            (exclude_terms if excluding else include_terms).append(term)
+
+        return include_terms, exclude_terms
+
+    def match_query(self, name):
+        name_lower = name.lower()
+
+        # Check exclude terms first
+        for term in self.exclude_terms:
+            if term in name_lower:
+                return False
+
+        # Then check include terms
+        for term in self.include_terms:
+            if " " in term:
+                # Quoted phrase: must match exactly
+                if term not in name_lower:
+                    return False
+            else:
+                # Single word: must exist somewhere in the name
+                if term not in name_lower:
+                    return False
+
+        return True
 
     def run(self):
         for root, dirs, files in os.walk(self.root_path):
@@ -27,7 +85,7 @@ class SearchThread(QThread):
             for name in dirs + files:
                 if self.stop_flag:
                     break
-                if self.query in name.lower():
+                if self.match_query(name):
                     full_path = os.path.join(root, name)
                     self.result_found.emit(name, full_path)
         self.finished.emit()
