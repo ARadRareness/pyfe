@@ -10,6 +10,7 @@
 - 🖼️ Custom file icons based on file types
 - ⚡ Keyboard shortcuts for common actions
 - 🔙 Navigation history (back, forward, up)
+- 🎬 Video to audio conversion (requires FFmpeg)
 
 ## 🧠 AI Features
 Using OpenAI or custom OpenAI-compatible endpoints, pyfe also supports:
