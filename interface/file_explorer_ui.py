@@ -17,6 +17,7 @@ from PySide6.QtGui import (
     QKeySequence,
     QShortcut,
     QKeyEvent,
+    QCloseEvent,
 )
 from PySide6.QtCore import (
     Qt,
@@ -60,6 +61,7 @@ class FileExplorerUI(QMainWindow):
         self.image_generator = ImageGenerator(self)
 
         self.navigation_manager.path_changed.connect(self.update_view)
+        self.navigation_manager.path_changed.connect(self.update_history_window)
         self.init_interface()
 
         self.model = QStandardItemModel()
@@ -75,6 +77,8 @@ class FileExplorerUI(QMainWindow):
 
         self.clipboard = []
         self.setup_shortcuts()
+
+        self.history_window = None
 
     def init_interface(self):
         main_layout = QVBoxLayout()
@@ -280,7 +284,7 @@ class FileExplorerUI(QMainWindow):
                     self.navigation_manager.go_up()
                 else:
                     new_path = os.path.normpath(
-                        QDir(self.current_path).filePath(file_name)
+                        QDir(self.navigation_manager.current_path).filePath(file_name)
                     )
                     file_info = QFileInfo(new_path)
                     if file_info.exists():
@@ -368,3 +372,17 @@ class FileExplorerUI(QMainWindow):
             item = self.model.itemFromIndex(source_index)
             if item:
                 self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close any other associated windows here if needed
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)

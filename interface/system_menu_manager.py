@@ -53,6 +53,15 @@ class SystemMenuManager:
             self.settings.value("enable_ai", False, type=bool)
         )
 
+        # Create View menu
+        view_menu = QMenu("View", self.parent)
+        menu_bar.addMenu(view_menu)
+
+        # Add History Explorer action to View menu
+        history_explorer_action = QAction("History Explorer", self.parent)
+        history_explorer_action.triggered.connect(self.show_history_explorer)
+        view_menu.addAction(history_explorer_action)
+
         # Create Options menu
         options_menu = QMenu("Options", self.parent)
         menu_bar.addMenu(options_menu)
@@ -81,3 +90,12 @@ class SystemMenuManager:
         self.parent.image_generator.show_generate_image_dialog(
             self.parent, self.parent.current_path
         )
+
+    def show_history_explorer(self):
+        if not self.parent.history_window or not self.parent.history_window.isVisible():
+            from interface.window.history_window import HistoryWindow
+
+            self.parent.history_window = HistoryWindow(self.parent)
+            self.parent.history_window.show()
+        else:
+            self.parent.history_window.activateWindow()

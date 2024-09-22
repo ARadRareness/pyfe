@@ -1,5 +1,5 @@
 import os
-from PySide6.QtCore import QObject, QDir, Signal
+from PySide6.QtCore import QObject, QDir, Signal, QDateTime
 
 
 class NavigationManager(QObject):
@@ -10,12 +10,14 @@ class NavigationManager(QObject):
         self.history_backward = []
         self.history_forward = []
         self.current_path = os.path.normpath(QDir.rootPath())
+        self.history = [(self.current_path, QDateTime.currentDateTime())]
 
     def navigate_to(self, path):
         if path != self.current_path:
             self.history_backward.append(self.current_path)
             self.history_forward.clear()
             self.current_path = path
+            self.history.append((path, QDateTime.currentDateTime()))
             self.path_changed.emit(self.current_path)
 
     def go_back(self):
@@ -58,3 +60,6 @@ class NavigationManager(QObject):
             self.go_back()
             return True
         return False
+
+    def get_history(self):
+        return list(reversed(self.history))
