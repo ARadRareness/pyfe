@@ -5,22 +5,26 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
     QLabel,
+    QAbstractItemView,
 )
 from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import QMainWindow
 import os
+
+from PySide6.QtGui import QShowEvent, QCloseEvent, QKeyEvent
 
 
 class SearchThread(QThread):
     result_found = Signal(str, str)
     finished = Signal()
 
-    def __init__(self, root_path, query):
+    def __init__(self, root_path: str, query: str):
         super().__init__()
         self.root_path = root_path
         self.include_terms, self.exclude_terms = self.parse_query(query)
         self.stop_flag = False
 
-    def parse_query(self, query):
+    def parse_query(self, query: str) -> tuple[list[str], list[str]]:
         include_terms = []
         exclude_terms = []
         current_phrase = []
@@ -57,7 +61,7 @@ class SearchThread(QThread):
 
         return include_terms, exclude_terms
 
-    def match_query(self, name):
+    def match_query(self, name: str) -> bool:
         name_lower = name.lower()
 
         # Check exclude terms first
@@ -95,12 +99,11 @@ class SearchThread(QThread):
 
 
 class SearchWindow(QWidget):
-    def __init__(self, parent):
-        super().__init__()
-        self.parent = parent
+    def __init__(self, parent: QMainWindow):
+        super().__init__(parent)
         self.setWindowTitle("Search Results")
         self.setGeometry(200, 200, 600, 400)
-        self.setWindowFlags(Qt.Window)  # Add this line to make it an independent window
+        self.setWindowFlags(Qt.WindowType.Window)
 
         layout = QVBoxLayout()
         self.status_label = QLabel("Searching...")
@@ -109,24 +112,28 @@ class SearchWindow(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(2)
         self.table.setHorizontalHeaderLabels(["Name", "Path"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
+        self.table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.Stretch
+        )
         self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.cellDoubleClicked.connect(self.navigate_to_item)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
 
         layout.addWidget(self.table)
         self.setLayout(layout)
 
         self.search_thread = None
-        self.result_count = 0  # Add this line to keep track of the result count
+        self.result_count = 0
 
-    def start_search(self, root_path, query):
+    def start_search(self, root_path: str, query: str):
         self.stop_current_search()
         self.table.setRowCount(0)
-        self.result_count = 0  # Reset the result count
+        self.result_count = 0
         self.status_label.setText("Searching...")
         self.search_thread = SearchThread(root_path, query)
         self.search_thread.result_found.connect(self.add_result)
@@ -137,7 +144,7 @@ class SearchWindow(QWidget):
         self.show()
         self.activateWindow()
         self.raise_()
-        self.setFocus(Qt.OtherFocusReason)
+        self.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def stop_current_search(self):
         if self.search_thread and self.search_thread.isRunning():
@@ -146,7 +153,7 @@ class SearchWindow(QWidget):
             self.search_thread.deleteLater()
             self.search_thread = None
 
-    def add_result(self, name, path):
+    def add_result(self, name: str, path: str):
         row = self.table.rowCount()
         self.table.insertRow(row)
         self.table.setItem(row, 0, QTableWidgetItem(name))
@@ -155,8 +162,8 @@ class SearchWindow(QWidget):
         dir_path = os.path.dirname(path)
         self.table.setItem(row, 1, QTableWidgetItem(dir_path))
 
-        self.result_count += 1  # Increment the result count
-        self.update_status_label()  # Update the status label
+        self.result_count += 1
+        self.update_status_label()
 
     def update_status_label(self):
         self.status_label.setText(f"Found {self.result_count} results")
@@ -164,24 +171,24 @@ class SearchWindow(QWidget):
     def search_finished(self):
         self.status_label.setText(f"Search complete. Found {self.result_count} results")
 
-    def navigate_to_item(self, row, column):
+    def navigate_to_item(self, row: int, _: int):
         path = self.table.item(row, 1).text()
+        file_explorer: any = self.parent()
+
         if os.path.isdir(path):
-            self.parent.navigation_manager.navigate_to(path)
+            file_explorer.navigation_manager.navigate_to(path)
         else:
             parent_dir = os.path.dirname(path)
-            self.parent.navigation_manager.navigate_to(parent_dir)
+            file_explorer.navigation_manager.navigate_to(parent_dir)
 
     def on_selection_changed(self):
         # Enable key press events when an item is selected
         self.setFocus()
 
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-            print("PRESSING ENTER")
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             selected_rows = self.table.selectionModel().selectedRows()
             if selected_rows:
-                print("NAVIGATING")
                 self.navigate_to_item(selected_rows[0].row(), 0)
             else:
                 print("NO ROW SELECTED")
@@ -189,19 +196,22 @@ class SearchWindow(QWidget):
             super().keyPressEvent(event)
 
     def position_window(self):
-        parent_geometry = self.parent.geometry()
+        file_explorer: any = self.parent()
+        parent_geometry: QMainWindow = file_explorer.geometry()
+
+        # Position the search window to the right of the parent window
         self.setGeometry(
-            parent_geometry.right(),
-            parent_geometry.top(),
+            parent_geometry.right(),  # type: ignore
+            parent_geometry.top(),  # type: ignore
             self.width(),
-            parent_geometry.height(),
+            parent_geometry.height(),  # type: ignore
         )
 
-    def showEvent(self, event):
+    def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
         self.position_window()
         self.raise_()
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: QCloseEvent) -> None:
         self.stop_current_search()
         super().closeEvent(event)
