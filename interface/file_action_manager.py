@@ -126,6 +126,14 @@ class FileActionManager:
             copy_action.triggered.connect(self.app.copy_clipboard)
             context_menu.addAction(copy_action)
 
+            # Add paste action
+            paste_action = QAction("Paste", self.app)
+            paste_action.triggered.connect(self.app.paste_clipboard)
+            paste_action.setEnabled(
+                bool(self.app.clipboard)
+            )  # Enable only if clipboard is not empty
+            context_menu.addAction(paste_action)
+
             delete_action = QAction("Delete", self.app)
             delete_action.triggered.connect(self.app.delete_selected)
             context_menu.addAction(delete_action)
@@ -212,6 +220,17 @@ class FileActionManager:
     def show_empty_context_menu(self, position, tree_view, current_path):
         context_menu = QMenu(self.app)
 
+        # Add paste action
+        paste_action = QAction("Paste", self.app)
+        paste_action.triggered.connect(self.app.paste_clipboard)
+        paste_action.setEnabled(
+            bool(self.app.clipboard)
+        )  # Enable only if clipboard is not empty
+        context_menu.addAction(paste_action)
+
+        # Add a separator
+        context_menu.addSeparator()
+
         # Modify the "New" submenu creation
         new_menu = QMenu("New", context_menu)
         new_file_action = QAction(self.app.icon_mapper.text_file_icon, "File", new_menu)
@@ -227,8 +246,6 @@ class FileActionManager:
         new_folder_action.triggered.connect(
             lambda: self.create_new_folder(current_path)
         )
-
-        # You can add more context menu items here if needed
 
         context_menu.exec(tree_view.viewport().mapToGlobal(position))
 
