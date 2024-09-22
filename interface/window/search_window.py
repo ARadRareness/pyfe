@@ -100,6 +100,7 @@ class SearchWindow(QWidget):
         self.parent = parent
         self.setWindowTitle("Search Results")
         self.setGeometry(200, 200, 600, 400)
+        self.setWindowFlags(Qt.Window)  # Add this line to make it an independent window
 
         layout = QVBoxLayout()
         self.status_label = QLabel("Searching...")
@@ -131,9 +132,12 @@ class SearchWindow(QWidget):
         self.search_thread.result_found.connect(self.add_result)
         self.search_thread.finished.connect(self.search_finished)
         self.search_thread.start()
-        self.activateWindow()  # Activate the window
-        self.raise_()  # Bring the window to the front
-        self.setFocus()  # Set focus to this window
+
+        # Ensure the window is visible and in focus
+        self.show()
+        self.activateWindow()
+        self.raise_()
+        self.setFocus(Qt.OtherFocusReason)
 
     def stop_current_search(self):
         if self.search_thread and self.search_thread.isRunning():
