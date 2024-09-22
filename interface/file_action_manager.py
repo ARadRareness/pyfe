@@ -18,6 +18,8 @@ class FileActionManager:
         self.multimedia_manager = MultimediaManager(app)
         self.text_manager = TextManager(app)
         self.init_interactions()
+        self.cut_mode = False  # Add this line
+        self.cut_source_path = None  # Add this line
 
     def init_interactions(self):
         # Define special interactions here
@@ -60,6 +62,10 @@ class FileActionManager:
             if not os.path.exists(source_path):
                 continue
 
+            # Skip if cutting and source and destination are the same
+            if self.cut_mode and os.path.dirname(source_path) == current_path:
+                continue
+
             copied_files.append(source_path)
             file_name = os.path.basename(source_path)
             destination_path = os.path.join(current_path, file_name)
@@ -74,14 +80,23 @@ class FileActionManager:
                     counter += 1
 
             try:
-                if os.path.isdir(source_path):
-                    shutil.copytree(source_path, destination_path)
+                if self.cut_mode:
+                    shutil.move(source_path, destination_path)
                 else:
-                    shutil.copy2(source_path, destination_path)
+                    if os.path.isdir(source_path):
+                        shutil.copytree(source_path, destination_path)
+                    else:
+                        shutil.copy2(source_path, destination_path)
             except Exception as e:
-                print(f"Error copying {source_path}: {str(e)}")
-
+                print(
+                    f"Error {'moving' if self.cut_mode else 'copying'} {source_path}: {str(e)}"
+                )
         return copied_files
+
+    def cut_files(self, items_to_cut, source_path):
+        self.cut_mode = True
+        self.cut_source_path = source_path  # Store the source path
+        return items_to_cut
 
     def show_context_menu(
         self, position, tree_view, model, proxy_model, current_path, favorites_manager
@@ -125,6 +140,11 @@ class FileActionManager:
             copy_action = QAction("Copy", self.app)
             copy_action.triggered.connect(self.app.copy_clipboard)
             context_menu.addAction(copy_action)
+
+            # Add cut action
+            cut_action = QAction("Cut", self.app)
+            cut_action.triggered.connect(self.app.cut_clipboard)
+            context_menu.addAction(cut_action)
 
             # Add paste action
             paste_action = QAction("Paste", self.app)

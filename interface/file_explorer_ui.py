@@ -138,7 +138,7 @@ class FileExplorerUI(QMainWindow):
     def setup_shortcuts(self):
         QShortcut(QKeySequence.Copy, self.tree_view, self.copy_clipboard)
         QShortcut(QKeySequence.Paste, self.tree_view, self.paste_clipboard)
-        # QShortcut(QKeySequence.Cut, self.tree_view, self.cut_selected)
+        QShortcut(QKeySequence.Cut, self.tree_view, self.cut_clipboard)
         QShortcut(QKeySequence.Delete, self.tree_view, self.delete_selected)
         QShortcut(
             QKeySequence(Qt.Key_F2), self.tree_view, self.rename_selected
@@ -163,13 +163,31 @@ class FileExplorerUI(QMainWindow):
         else:
             print(f"Copied {len(self.clipboard)} item(s) to clipboard")
 
+        self.file_action_manager.cut_mode = False
+
+    def cut_clipboard(self):
+        self.copy_clipboard()
+        self.file_action_manager.cut_files(self.clipboard, self.current_path)
+        print(f"Cut {len(self.clipboard)} item(s) to clipboard")
+
     def paste_clipboard(self):
+        if (
+            self.file_action_manager.cut_mode
+            and self.file_action_manager.cut_source_path == self.current_path
+        ):
+            print("Cannot paste: source and destination are the same")
+            return
+
         files_copied = self.file_action_manager.copy_files(
             self.clipboard, self.current_path
         )
 
         if files_copied:
             self.update_view()
+            if self.file_action_manager.cut_mode:
+                self.clipboard.clear()  # Clear the clipboard after cutting and pasting
+                self.file_action_manager.cut_mode = False
+                self.file_action_manager.cut_source_path = None
 
     def delete_selected(self):
         selected_indexes = self.tree_view.selectedIndexes()
