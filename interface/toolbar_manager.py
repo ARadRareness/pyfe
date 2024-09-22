@@ -58,6 +58,7 @@ class ToolbarManager:
 
     def setup_search_bar(self):
         self.search_bar.setPlaceholderText("Search")
+        self.search_bar.returnPressed.connect(self.parent.search_files)
 
     def set_button_icon(self, button, icon_name):
         icon_path = os.path.join(self.base_dir, "icons", icon_name)
@@ -72,7 +73,7 @@ class ToolbarManager:
         self.up_btn.clicked.connect(navigation_manager.go_up)
         self.refresh_btn.clicked.connect(self.parent.update_view)
         self.address_bar.returnPressed.connect(self.parent.change_directory)
-        self.search_bar.textChanged.connect(self.parent.filter_view)
+        self.search_bar.returnPressed.connect(self.parent.search_files)
 
     def update_address_bar(self, path):
         self.address_bar.setText(path)

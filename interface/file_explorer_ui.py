@@ -38,6 +38,7 @@ from interface.favorites_manager import FavoritesManager
 from interface.system_menu_manager import SystemMenuManager
 from interface.toolbar_manager import ToolbarManager  # Add this import
 from interface.ai.image_generator import ImageGenerator
+from interface.window.search_window import SearchWindow
 
 
 class FileExplorerUI(QMainWindow):
@@ -79,6 +80,7 @@ class FileExplorerUI(QMainWindow):
         self.setup_shortcuts()
 
         self.history_window = None
+        self.search_window = None
 
     def init_interface(self):
         main_layout = QVBoxLayout()
@@ -130,6 +132,7 @@ class FileExplorerUI(QMainWindow):
         self.toolbar_manager.connect_signals(self.navigation_manager)
         self.tree_view.doubleClicked.connect(self.on_double_click)
         self.favorites_manager.get_view().clicked.connect(self.on_favorite_click)
+        self.tree_view.activated.connect(self.on_item_activated)
 
     def set_window_icon(self):
         icon_path = os.path.join(self.base_dir, "icons", "icon.png")
@@ -291,25 +294,29 @@ class FileExplorerUI(QMainWindow):
 
         self.model.appendRow([name_item, date_item, type_item, size_item])
 
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
     def on_double_click(self, index):
         if QApplication.mouseButtons() == Qt.LeftButton:
-            # Convert the proxy model index to the source model index
-            source_index = self.proxy_model.mapToSource(index)
-            item = self.model.itemFromIndex(source_index)
-            if item:
-                file_name = item.text()
-                if file_name == "..":
-                    self.navigation_manager.go_up()
-                else:
-                    new_path = os.path.normpath(
-                        QDir(self.navigation_manager.current_path).filePath(file_name)
-                    )
-                    file_info = QFileInfo(new_path)
-                    if file_info.exists():
-                        if file_info.isDir():
-                            self.navigation_manager.navigate_to(new_path)
-                        else:
-                            QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+            self.on_item_activated(index)
 
     def on_favorite_click(self, index):
         item = self.favorites_manager.favorites_model.itemFromIndex(index)
@@ -371,10 +378,17 @@ class FileExplorerUI(QMainWindow):
                 self.current_path,
             )
 
-    def filter_view(self):
-        search_text = self.toolbar_manager.get_search_text()
-        # Implement the filtering logic here
-        # For example, you can hide/show items in the tree_view based on the search_text
+    def search_files(self):
+        query = self.toolbar_manager.get_search_text()
+        if not query:
+            return
+
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        elif not self.search_window.isVisible():
+            self.search_window.show()
+
+        self.search_window.start_search(self.current_path, query)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_Backspace:
@@ -400,7 +414,10 @@ class FileExplorerUI(QMainWindow):
         if self.history_window and self.history_window.isVisible():
             self.history_window.close()
 
-        # Close any other associated windows here if needed
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
 
         # Call the parent class's closeEvent
         super().closeEvent(event)
