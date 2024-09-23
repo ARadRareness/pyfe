@@ -1,12 +1,14 @@
 from PySide6.QtWidgets import QListView, QMenu, QMessageBox, QInputDialog
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QBrush, QColor
-from PySide6.QtCore import Qt, QSize, QDir, QSettings
+from PySide6.QtCore import Qt, QSize, QDir
 import os
 import sys
 
+from interface.constants import settings
+
 
 class FavoritesManager:
-    def __init__(self, base_dir):
+    def __init__(self, base_dir: str):
         self.base_dir = base_dir
         self.favorites_view = QListView()
         self.favorites_model = QStandardItemModel()
@@ -15,8 +17,6 @@ class FavoritesManager:
         self.favorites_view.setSelectionMode(QListView.NoSelection)
         self.favorites_view.setContextMenuPolicy(Qt.CustomContextMenu)
         self.favorites_view.customContextMenuRequested.connect(self.show_context_menu)
-
-        self.settings = QSettings("ARadRareness", "PythonFileExplorer")
 
         self.populate_favorites()
         self.add_favorites_delimiter()
@@ -141,7 +141,7 @@ class FavoritesManager:
         return self.favorites_view
 
     def load_starred_folders(self):
-        starred_folders = self.settings.value("starred_folders", [])
+        starred_folders = settings.value("starred_folders", [])
 
         for name, path, custom_name in starred_folders:
             if os.path.exists(path):
@@ -158,7 +158,7 @@ class FavoritesManager:
                     (original_name, item.data(Qt.UserRole), custom_name)
                 )
 
-        self.settings.setValue("starred_folders", starred_folders)
+        settings.setValue("starred_folders", starred_folders)
 
     def rename_favorite(self, item):
         old_name = item.text()

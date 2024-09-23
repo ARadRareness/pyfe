@@ -1,4 +1,5 @@
 import requests
+from PySide6.QtWidgets import QMessageBox
 
 
 class OpenAIClient:
@@ -8,7 +9,19 @@ class OpenAIClient:
         self.audio = Audio(self)
         self.images = Images(self)
 
+    def check_api_access(self, parent):
+        print(self.base_url, self.api_key)
+        if self.base_url == "https://api.openai.com/v1" and not self.api_key:
+            QMessageBox.warning(
+                parent,
+                "API Key Required",
+                "You need to create an API key to use OpenAI services.",
+            )
+            return False
+        return True
+
     def chat_completion(self, messages):
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",

@@ -131,7 +131,6 @@ class FileExplorerUI(QMainWindow):
 
     def connect_signals(self):
         self.toolbar_manager.connect_signals(self.navigation_manager)
-        self.tree_view.doubleClicked.connect(self.on_double_click)
         self.favorites_manager.get_view().clicked.connect(self.on_favorite_click)
         self.tree_view.activated.connect(self.on_item_activated)
 

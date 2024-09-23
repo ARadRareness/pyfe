@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QObject, Signal, QThread
 from interface.ai.openai_client import OpenAIClient
 
+from interface.constants import settings
+
 
 class SpeechGeneratorWorker(QObject):
     finished = Signal(str)
@@ -37,11 +39,24 @@ class SpeechGeneratorWorker(QObject):
 class SpeechGenerator:
     def __init__(self, app):
         self.app = app
-        self.client = OpenAIClient(api_key="test", base_url="http://localhost:17173")
         self.dialog = None
+        self.thread = None
 
     def generate_speech(self, text, output_path, voice):
-        self.worker = SpeechGeneratorWorker(self.client, text, output_path, voice)
+        client = OpenAIClient(
+            api_key=settings.value("api_key", ""),
+            base_url=settings.value("custom_url", "https://api.openai.com/v1"),
+        )
+
+        if not client.check_api_access(self.app):
+            self.dialog.close()
+            return
+
+        if self.thread is not None:
+            self.thread.quit()
+            self.thread.wait()
+
+        self.worker = SpeechGeneratorWorker(client, text, output_path, voice)
         self.thread = QThread()
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)

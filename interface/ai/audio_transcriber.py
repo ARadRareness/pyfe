@@ -3,6 +3,8 @@ from PySide6.QtCore import QObject, Signal, QThread, Qt
 
 from interface.ai.openai_client import OpenAIClient
 
+from interface.constants import settings
+
 
 class AudioTranscriberWorker(QObject):
     finished = Signal(str)
@@ -32,7 +34,6 @@ class AudioTranscriberWorker(QObject):
 class AudioTranscriber:
     def __init__(self, app):
         self.app = app
-        self.client = OpenAIClient(api_key="test", base_url="http://localhost:17173")
         self.msg_label = None
 
     def transcribe_audio_into_file(self, input_file_path, output_file_path):
@@ -47,10 +48,17 @@ class AudioTranscriber:
         )
         self.msg_label.show()
 
-        # Create and start the worker thread
-        self.worker = AudioTranscriberWorker(
-            self.client, input_file_path, output_file_path
+        client = OpenAIClient(
+            api_key=settings.value("api_key", ""),
+            base_url=settings.value("custom_url", "https://api.openai.com/v1"),
         )
+
+        if not client.check_api_access(self.app):
+            self.close_msg()
+            return
+
+        # Create and start the worker thread
+        self.worker = AudioTranscriberWorker(client, input_file_path, output_file_path)
         self.thread = QThread()
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)

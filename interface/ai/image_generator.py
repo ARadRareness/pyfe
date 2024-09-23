@@ -16,6 +16,8 @@ from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt, QObject, Signal, QThread
 from interface.ai.openai_client import OpenAIClient
 
+from interface.constants import settings
+
 
 class ImageGeneratorWorker(QObject):
     finished = Signal(QImage)
@@ -46,11 +48,19 @@ class ImageGeneratorWorker(QObject):
 class ImageGenerator:
     def __init__(self, app):
         self.app = app
-        self.client = OpenAIClient(api_key="test", base_url="http://localhost:17173")
         self.dialog = None
 
     def generate_image(self, name, prompt, save_path):
-        self.worker = ImageGeneratorWorker(self.client, prompt)
+        client = OpenAIClient(
+            api_key=settings.value("api_key", ""),
+            base_url=settings.value("custom_url", "https://api.openai.com/v1"),
+        )
+
+        if not client.check_api_access(self.app):
+            self.dialog.close()
+            return
+
+        self.worker = ImageGeneratorWorker(client, prompt)
         self.thread = QThread()
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run)

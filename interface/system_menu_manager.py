@@ -1,6 +1,17 @@
-from PySide6.QtWidgets import QMenuBar, QMenu
-from PySide6.QtCore import QSettings
+from PySide6.QtWidgets import (
+    QMenuBar,
+    QMenu,
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QCheckBox,
+    QLineEdit,
+    QPushButton,
+    QLabel,
+)
 from PySide6.QtGui import QAction
+
+from interface.constants import settings
 
 from typing import TYPE_CHECKING
 
@@ -11,7 +22,6 @@ if TYPE_CHECKING:
 class SystemMenuManager:
     def __init__(self, parent: "FileExplorerUI"):
         self.parent = parent
-        self.settings = QSettings("ARadRareness", "PythonFileExplorer")
         self.create_system_menu()
 
     def create_system_menu(self):
@@ -54,7 +64,7 @@ class SystemMenuManager:
         self.generate_image_action.triggered.connect(self.show_generate_image_dialog)
         file_menu.addAction(self.generate_image_action)
         self.generate_image_action.setVisible(
-            bool(self.settings.value("enable_ai", False, type=bool))
+            bool(settings.value("enable_ai", False, type=bool))
         )
 
         # Create View menu
@@ -70,19 +80,10 @@ class SystemMenuManager:
         options_menu = QMenu("Options", self.parent)
         menu_bar.addMenu(options_menu)
 
-        # Create Enable AI action
-        self.enable_ai_action = QAction("Enable AI", self.parent, checkable=True)  # type: ignore
-        self.enable_ai_action.setChecked(
-            bool(self.settings.value("enable_ai", False, type=bool))
-        )
-        self.enable_ai_action.triggered.connect(self.toggle_ai)
-        options_menu.addAction(self.enable_ai_action)
-
-    def toggle_ai(self):
-        is_enabled = self.enable_ai_action.isChecked()
-        self.settings.setValue("enable_ai", is_enabled)
-        print(f"AI is now {'enabled' if is_enabled else 'disabled'}")
-        self.generate_image_action.setVisible(is_enabled)
+        # Create AI Settings action
+        ai_settings_action = QAction("AI Settings", self.parent)
+        ai_settings_action.triggered.connect(self.show_ai_settings_dialog)
+        options_menu.addAction(ai_settings_action)
 
     def show_generate_image_dialog(self):
         self.parent.image_generator.show_generate_image_dialog(
@@ -98,3 +99,55 @@ class SystemMenuManager:
             history_window.show()
         else:
             self.parent.history_window.activateWindow()
+
+    def show_ai_settings_dialog(self):
+        dialog = QDialog(self.parent)
+        dialog.setWindowTitle("AI Settings")
+        layout = QVBoxLayout()
+
+        # Enable AI checkbox
+        enable_ai_checkbox = QCheckBox("Enable AI")
+        enable_ai_checkbox.setChecked(
+            bool(settings.value("enable_ai", False, type=bool))
+        )
+        layout.addWidget(enable_ai_checkbox)
+
+        # API Key input
+        api_key_layout = QHBoxLayout()
+        api_key_label = QLabel("API Key:")
+        api_key_input = QLineEdit()
+        api_key_input.setText(settings.value("api_key", ""))
+        api_key_layout.addWidget(api_key_label)
+        api_key_layout.addWidget(api_key_input)
+        layout.addLayout(api_key_layout)
+
+        # Custom URL input
+        custom_url_layout = QHBoxLayout()
+        custom_url_label = QLabel("Custom URL:")
+        custom_url_input = QLineEdit()
+        custom_url_input.setText(settings.value("custom_url", ""))
+        custom_url_layout.addWidget(custom_url_label)
+        custom_url_layout.addWidget(custom_url_input)
+        layout.addLayout(custom_url_layout)
+
+        # Buttons
+        button_layout = QHBoxLayout()
+        save_button = QPushButton("Save")
+        close_button = QPushButton("Close")
+        button_layout.addWidget(save_button)
+        button_layout.addWidget(close_button)
+        layout.addLayout(button_layout)
+
+        dialog.setLayout(layout)
+
+        def save_settings():
+            settings.setValue("enable_ai", enable_ai_checkbox.isChecked())
+            settings.setValue("api_key", api_key_input.text())
+            settings.setValue("custom_url", custom_url_input.text())
+            self.generate_image_action.setVisible(enable_ai_checkbox.isChecked())
+            dialog.accept()
+
+        save_button.clicked.connect(save_settings)
+        close_button.clicked.connect(dialog.reject)
+
+        dialog.exec()
