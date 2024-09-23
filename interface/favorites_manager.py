@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QListView, QMenu, QMessageBox
+from PySide6.QtWidgets import QListView, QMenu, QMessageBox, QInputDialog
 from PySide6.QtGui import QStandardItemModel, QStandardItem, QIcon, QBrush, QColor
 from PySide6.QtCore import Qt, QSize, QDir, QSettings
 import os
@@ -106,11 +106,15 @@ class FavoritesManager:
         item = self.favorites_model.itemFromIndex(index)
         if item.data(Qt.UserRole + 1) == "starred":
             menu = QMenu()
+            rename_action = menu.addAction("Rename")
             remove_action = menu.addAction("Remove")
+
             action = menu.exec_(self.favorites_view.viewport().mapToGlobal(position))
 
             if action == remove_action:
                 self.confirm_remove_favorite(item)
+            elif action == rename_action:
+                self.rename_favorite(item)
 
     def is_drive(self, path):
         if sys.platform == "win32":
@@ -138,15 +142,29 @@ class FavoritesManager:
 
     def load_starred_folders(self):
         starred_folders = self.settings.value("starred_folders", [])
-        for name, path in starred_folders:
+
+        for name, path, custom_name in starred_folders:
             if os.path.exists(path):
-                self.add_favorite_item(name, path, "starred")
+                self.add_favorite_item(custom_name or name, path, "starred")
 
     def save_starred_folders(self):
         starred_folders = []
         for row in range(self.favorites_model.rowCount()):
             item = self.favorites_model.item(row)
             if item.data(Qt.UserRole + 1) == "starred":
-                starred_folders.append((item.text(), item.data(Qt.UserRole)))
+                original_name = os.path.basename(item.data(Qt.UserRole))
+                custom_name = item.text() if item.text() != original_name else None
+                starred_folders.append(
+                    (original_name, item.data(Qt.UserRole), custom_name)
+                )
 
         self.settings.setValue("starred_folders", starred_folders)
+
+    def rename_favorite(self, item):
+        old_name = item.text()
+        new_name, ok = QInputDialog.getText(
+            self.favorites_view, "Rename Favorite", "Enter new name:", text=old_name
+        )
+        if ok and new_name:
+            item.setText(new_name)
+            self.save_starred_folders()

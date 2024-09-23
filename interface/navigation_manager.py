@@ -12,7 +12,10 @@ class NavigationManager(QObject):
         self.current_path = os.path.normpath(QDir.rootPath())
         self.history = [(self.current_path, QDateTime.currentDateTime())]
 
-    def navigate_to(self, path):
+    def get_current_path(self) -> str:
+        return self.current_path
+
+    def navigate_to(self, path: str):
         if path != self.current_path:
             self.history_backward.append(self.current_path)
             self.history_forward.clear()
