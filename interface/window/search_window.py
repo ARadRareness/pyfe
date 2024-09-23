@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import QMainWindow
 import os
+import sys
 
 from PySide6.QtGui import QShowEvent, QCloseEvent, QKeyEvent
 
@@ -83,9 +84,14 @@ class SearchThread(QThread):
         return True
 
     def run(self):
-        for root, dirs, files in os.walk(self.root_path):
+        for root, dirs, files in os.walk(self.root_path, topdown=True):
             if self.stop_flag:
                 break
+
+            # Skip protected directories only if we're on macOS and at the root level
+            if sys.platform == "darwin" and root == "/":
+                dirs[:] = [d for d in dirs if not self.is_protected_directory(d)]
+
             for name in dirs + files:
                 if self.stop_flag:
                     break
@@ -93,6 +99,22 @@ class SearchThread(QThread):
                     full_path = os.path.join(root, name)
                     self.result_found.emit(name, full_path)
         self.finished.emit()
+
+    def is_protected_directory(self, dirname: str) -> bool:
+        protected_dirs = [
+            "Library",
+            "System",
+            "private",
+            "cores",
+            "etc",
+            "var",
+            "usr",
+            "bin",
+            "sbin",
+            "opt",
+            "Applications",
+        ]
+        return dirname in protected_dirs
 
     def stop(self):
         self.stop_flag = True
