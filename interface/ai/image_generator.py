@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt, QObject, Signal, QThread
-from interface.ai.openai_utils import OpenAIUtils
+from interface.ai.openai_client import OpenAIClient
 
 
 class ImageGeneratorWorker(QObject):
@@ -46,17 +46,10 @@ class ImageGeneratorWorker(QObject):
 class ImageGenerator:
     def __init__(self, app):
         self.app = app
-        if OpenAIUtils.is_available():
-            self.client = OpenAIUtils.getOpenAI()
-        else:
-            self.client = None
+        self.client = OpenAIClient(api_key="test", base_url="http://localhost:17173")
         self.dialog = None
 
     def generate_image(self, name, prompt, save_path):
-        if not OpenAIUtils.is_available():
-            OpenAIUtils.show_not_available(self.app)
-            return
-
         self.worker = ImageGeneratorWorker(self.client, prompt)
         self.thread = QThread()
         self.worker.moveToThread(self.thread)
@@ -90,10 +83,6 @@ class ImageGenerator:
         self.generate_button.setText("Generate")
 
     def show_generate_image_dialog(self, parent, current_path):
-        if not OpenAIUtils.is_available():
-            OpenAIUtils.show_not_available(parent)
-            return
-
         if self.dialog is None:
             self.dialog = QDialog(parent)
             self.dialog.setWindowTitle("Generate Image")

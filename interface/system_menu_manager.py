@@ -1,11 +1,15 @@
-from PySide6.QtWidgets import QMenuBar, QMenu, QMessageBox
+from PySide6.QtWidgets import QMenuBar, QMenu
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QAction
-from interface.ai.openai_utils import OpenAIUtils
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from interface.file_explorer_ui import FileExplorerUI
 
 
 class SystemMenuManager:
-    def __init__(self, parent):
+    def __init__(self, parent: "FileExplorerUI"):
         self.parent = parent
         self.settings = QSettings("ARadRareness", "PythonFileExplorer")
         self.create_system_menu()
@@ -50,7 +54,7 @@ class SystemMenuManager:
         self.generate_image_action.triggered.connect(self.show_generate_image_dialog)
         file_menu.addAction(self.generate_image_action)
         self.generate_image_action.setVisible(
-            self.settings.value("enable_ai", False, type=bool)
+            bool(self.settings.value("enable_ai", False, type=bool))
         )
 
         # Create View menu
@@ -67,20 +71,14 @@ class SystemMenuManager:
         menu_bar.addMenu(options_menu)
 
         # Create Enable AI action
-        self.enable_ai_action = QAction("Enable AI", self.parent, checkable=True)
+        self.enable_ai_action = QAction("Enable AI", self.parent, checkable=True)  # type: ignore
         self.enable_ai_action.setChecked(
-            self.settings.value("enable_ai", False, type=bool)
-            and OpenAIUtils.is_available()
+            bool(self.settings.value("enable_ai", False, type=bool))
         )
         self.enable_ai_action.triggered.connect(self.toggle_ai)
         options_menu.addAction(self.enable_ai_action)
 
     def toggle_ai(self):
-        if not OpenAIUtils.is_available() and self.enable_ai_action.isChecked():
-            OpenAIUtils.show_not_available(self.parent)
-            self.enable_ai_action.setChecked(False)
-            return
-
         is_enabled = self.enable_ai_action.isChecked()
         self.settings.setValue("enable_ai", is_enabled)
         print(f"AI is now {'enabled' if is_enabled else 'disabled'}")
@@ -95,7 +93,8 @@ class SystemMenuManager:
         if not self.parent.history_window or not self.parent.history_window.isVisible():
             from interface.window.history_window import HistoryWindow
 
-            self.parent.history_window = HistoryWindow(self.parent)
-            self.parent.history_window.show()
+            history_window = HistoryWindow(self.parent)
+            self.parent.set_history_window(history_window)
+            history_window.show()
         else:
             self.parent.history_window.activateWindow()

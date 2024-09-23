@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 from PySide6.QtCore import QObject, Signal, QThread
-from interface.ai.openai_utils import OpenAIUtils
+from interface.ai.openai_client import OpenAIClient
 
 
 class SpeechGeneratorWorker(QObject):
@@ -37,17 +37,10 @@ class SpeechGeneratorWorker(QObject):
 class SpeechGenerator:
     def __init__(self, app):
         self.app = app
-        if OpenAIUtils.is_available():
-            self.client = OpenAIUtils.getOpenAI()
-        else:
-            self.client = None
+        self.client = OpenAIClient(api_key="test", base_url="http://localhost:17173")
         self.dialog = None
 
     def generate_speech(self, text, output_path, voice):
-        if not OpenAIUtils.is_available():
-            OpenAIUtils.show_not_available(self.app)
-            return
-
         self.worker = SpeechGeneratorWorker(self.client, text, output_path, voice)
         self.thread = QThread()
         self.worker.moveToThread(self.thread)
@@ -77,10 +70,6 @@ class SpeechGenerator:
         self.generate_button.setText("Generate")
 
     def show_generate_speech_dialog(self, file_path, output_path):
-        if not OpenAIUtils.is_available():
-            OpenAIUtils.show_not_available(self.app)
-            return
-
         self.file_path = file_path
         self.output_path = output_path
         self.file_name = os.path.splitext(os.path.basename(file_path))[0]

@@ -38,6 +38,7 @@ from interface.favorites_manager import FavoritesManager
 from interface.system_menu_manager import SystemMenuManager
 from interface.toolbar_manager import ToolbarManager  # Add this import
 from interface.ai.image_generator import ImageGenerator
+from interface.window.history_window import HistoryWindow
 from interface.window.search_window import SearchWindow
 
 
@@ -358,6 +359,9 @@ class FileExplorerUI(QMainWindow):
     def change_directory(self, new_path):
         if QDir(new_path).exists():
             self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
 
     def show_context_menu(self, position):
         index = self.tree_view.indexAt(position)

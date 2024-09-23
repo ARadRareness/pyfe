@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QMessageBox, QLabel
 from PySide6.QtCore import QObject, Signal, QThread, Qt
-from interface.ai.openai_utils import OpenAIUtils
-from PySide6.QtCore import QTimer
+
+from interface.ai.openai_client import OpenAIClient
 
 
 class AudioTranscriberWorker(QObject):
@@ -32,17 +32,10 @@ class AudioTranscriberWorker(QObject):
 class AudioTranscriber:
     def __init__(self, app):
         self.app = app
-        if OpenAIUtils.is_available():
-            self.client = OpenAIUtils.getOpenAI()
-        else:
-            self.client = None
+        self.client = OpenAIClient(api_key="test", base_url="http://localhost:17173")
         self.msg_label = None
 
     def transcribe_audio_into_file(self, input_file_path, output_file_path):
-        if not OpenAIUtils.is_available():
-            OpenAIUtils.show_not_available(self.app)
-            return
-
         # Show a non-modal "Transcribing..." message
         self.msg_label = QLabel("Transcribing audio file...", self.app)
         self.msg_label.setAlignment(Qt.AlignCenter)
