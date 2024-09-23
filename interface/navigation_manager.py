@@ -7,8 +7,8 @@ class NavigationManager(QObject):
 
     def __init__(self):
         super().__init__()
-        self.history_backward = []
-        self.history_forward = []
+        self.history_backward: list[str] = []
+        self.history_forward: list[str] = []
         self.current_path = os.path.normpath(QDir.rootPath())
         self.history = [(self.current_path, QDateTime.currentDateTime())]
 
@@ -39,10 +39,10 @@ class NavigationManager(QObject):
         parent_path = os.path.normpath(QDir(self.current_path).filePath(".."))
         self.navigate_to(parent_path)
 
-    def can_go_back(self):
+    def can_go_back(self) -> bool:
         return bool(self.history_backward)
 
-    def can_go_forward(self):
+    def can_go_forward(self) -> bool:
         return bool(self.history_forward)
 
     def can_go_up(self):

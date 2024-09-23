@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 
 def find_between(
@@ -7,7 +7,7 @@ def find_between(
     if len(patterns) < 2 or start_index == -1:
         return [], -1
 
-    indices = []
+    indices: List[int] = []
     current_index = start_index
     prev_pattern_length = 0
 

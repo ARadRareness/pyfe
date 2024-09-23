@@ -172,14 +172,14 @@ class SearchWindow(QWidget):
         self.status_label.setText(f"Search complete. Found {self.result_count} results")
 
     def navigate_to_item(self, row: int, _: int):
+        fname = self.table.item(row, 0).text()
         path = self.table.item(row, 1).text()
         file_explorer: any = self.parent()
 
-        if os.path.isdir(path):
-            file_explorer.navigation_manager.navigate_to(path)
+        if os.path.isdir(os.path.join(path, fname)):
+            file_explorer.navigation_manager.navigate_to(os.path.join(path, fname))
         else:
-            parent_dir = os.path.dirname(path)
-            file_explorer.navigation_manager.navigate_to(parent_dir)
+            file_explorer.navigation_manager.navigate_to(path)
 
     def on_selection_changed(self):
         # Enable key press events when an item is selected
