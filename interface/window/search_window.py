@@ -16,20 +16,24 @@ from PySide6.QtWidgets import QMainWindow
 import os
 import sys
 import math
+import uuid  # Add this import
 
 from PySide6.QtGui import QShowEvent, QCloseEvent, QKeyEvent
 
 
 class SearchThread(QThread):
-    result_found = Signal(str, str, str, str, str)
-    finished = Signal()
+    result_found = Signal(str, str, str, str, str, str)  # Add search_id to the signal
+    finished = Signal(str)  # Add search_id to the finished signal
 
-    def __init__(self, root_path: str, name_query: str, content_query: str):
+    def __init__(
+        self, root_path: str, name_query: str, content_query: str, search_id: str
+    ):
         super().__init__()
         self.root_path = root_path
         self.content_query = content_query
         self.include_terms, self.exclude_terms = self.parse_query(name_query)
         self.stop_flag = False
+        self.search_id = search_id  # Store the search_id
 
     def parse_query(self, query: str) -> tuple[list[str], list[str]]:
         include_terms = []
@@ -112,10 +116,17 @@ class SearchThread(QThread):
                     )
                     size_kb = math.ceil(file_info.size() / 1024)
                     size = f"{size_kb} KB" if file_info.isFile() else ""
-                    self.result_found.emit(
-                        name, full_path, date_modified, file_type, size
-                    )
-        self.finished.emit()
+                    if not self.stop_flag:
+                        self.result_found.emit(
+                            name,
+                            full_path,
+                            date_modified,
+                            file_type,
+                            size,
+                            self.search_id,
+                        )
+
+        self.finished.emit(self.search_id)
 
     def is_protected_directory(self, dirname: str) -> bool:
         protected_dirs = [
@@ -203,6 +214,7 @@ class SearchWindow(QWidget):
 
         self.search_thread = None
         self.result_count = 0
+        self.current_search_id = None
 
         # Connect input fields to search function
         self.name_input.returnPressed.connect(self.start_search_from_input)
@@ -219,13 +231,17 @@ class SearchWindow(QWidget):
     def start_search(self, root_path: str, name_query: str, content_query: str):
         self.stop_current_search()
         self.table.setRowCount(0)
+        self.table.clearContents()  # Clear all items from the table
         self.result_count = 0
         self.status_label.setText("Searching...")
 
         if not os.path.isdir(root_path):
             root_path = os.path.expanduser("~")
 
-        self.search_thread = SearchThread(root_path, name_query, content_query)
+        self.current_search_id = str(uuid.uuid4())  # Generate a new search ID
+        self.search_thread = SearchThread(
+            root_path, name_query, content_query, self.current_search_id
+        )
         self.search_thread.result_found.connect(self.add_result)
         self.search_thread.finished.connect(self.search_finished)
         self.search_thread.start()
@@ -250,7 +266,11 @@ class SearchWindow(QWidget):
         date_modified: str,
         file_type: str,
         size: str,
+        search_id: str,
     ):
+        if search_id != self.current_search_id:
+            return  # Ignore results from old searches
+
         row = self.table.rowCount()
         self.table.insertRow(row)
         self.table.setItem(row, 0, QTableWidgetItem(name))
@@ -258,14 +278,13 @@ class SearchWindow(QWidget):
         self.table.setItem(row, 2, QTableWidgetItem(date_modified))
         self.table.setItem(row, 3, QTableWidgetItem(file_type))
         self.table.setItem(row, 4, QTableWidgetItem(size))
-
         # Set the full path as item data for later use
-        self.table.item(row, 0).setData(Qt.UserRole, full_path)
+        self.table.item(row, 0).setData(Qt.ItemDataRole.UserRole, full_path)
 
         # Set custom sort role data for the size column
         size_item = self.table.item(row, 4)
         size_value = int(size.split()[0]) if size else -1
-        size_item.setData(Qt.UserRole, size_value)
+        size_item.setData(Qt.ItemDataRole.UserRole, size_value)
 
         self.result_count += 1
         self.update_status_label()
@@ -273,11 +292,14 @@ class SearchWindow(QWidget):
     def update_status_label(self):
         self.status_label.setText(f"Found {self.result_count} results")
 
-    def search_finished(self):
+    def search_finished(self, search_id: str):
+        if search_id != self.current_search_id:
+            return  # Ignore finished signal from old searches
+
         self.status_label.setText(f"Search complete. Found {self.result_count} results")
 
     def navigate_to_item(self, row: int, _: int):
-        path = self.table.item(row, 0).data(Qt.UserRole)
+        path = self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
         file_explorer: any = self.parent()
 
         if os.path.isdir(path):
@@ -294,8 +316,6 @@ class SearchWindow(QWidget):
             selected_rows = self.table.selectionModel().selectedRows()
             if selected_rows:
                 self.navigate_to_item(selected_rows[0].row(), 0)
-            else:
-                print("NO ROW SELECTED")
         else:
             super().keyPressEvent(event)
 
@@ -331,11 +351,12 @@ class SearchWindow(QWidget):
     def set_name_input(self, query: str):
         self.name_input.setText(query)
 
-    def set_path_input(self, path: str):
+    def set_path_input(self, path: str, search: bool = True):
         # Convert to OS-specific path
         path = os.path.normpath(path)
         self.path_input.setText(path)
-        self.start_search_from_input()
+        if search:
+            self.start_search_from_input()
 
     def set_content_input(self, content: str):
         self.content_input.setText(content)

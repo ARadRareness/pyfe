@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QFileSystemModel,
 )
 from PySide6.QtGui import QIcon, QPixmap
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QSize, Signal, QObject
 import subprocess
 import shlex
 import functools
@@ -27,7 +27,9 @@ class AddressBar(QLineEdit):
         super().__init__(parent)
 
 
-class ToolbarManager:
+class ToolbarManager(QObject):
+    filter_changed = Signal(str)
+
     def __init__(
         self,
         parent: "FileExplorerUI",
@@ -42,20 +44,21 @@ class ToolbarManager:
         self.up_btn = QPushButton()
         self.refresh_btn = QPushButton()
         self.address_bar = AddressBar()
-        self.search_bar = QLineEdit()
+        self.filter_bar = QLineEdit()  # Rename search_bar to filter_bar
+        super().__init__(parent)
 
     def create_toolbar(self):
         toolbar = QHBoxLayout()
         self.setup_buttons()
         self.setup_address_bar()
-        self.setup_search_bar()
+        self.setup_filter_bar()  # Rename this method call
 
         toolbar.addWidget(self.back_btn)
         toolbar.addWidget(self.forward_btn)
         toolbar.addWidget(self.up_btn)
         toolbar.addWidget(self.refresh_btn)
         toolbar.addWidget(self.address_bar)
-        toolbar.addWidget(self.search_bar)
+        toolbar.addWidget(self.filter_bar)  # Update this line
 
         return toolbar
 
@@ -68,9 +71,18 @@ class ToolbarManager:
     def setup_address_bar(self):
         self.address_bar = AddressBar()
 
-    def setup_search_bar(self):
-        self.search_bar.setPlaceholderText("Search")
-        self.search_bar.returnPressed.connect(self.parent.search_files)
+    def setup_filter_bar(self):
+        self.filter_bar.setPlaceholderText("Filter")
+        self.filter_bar.textChanged.connect(self.on_filter_changed)
+
+    def on_filter_changed(self, text):
+        self.filter_changed.emit(text)
+
+    def get_filter_text(self) -> str:
+        return self.filter_bar.text()
+
+    def clear_filter_bar(self):
+        self.filter_bar.clear()
 
     def set_button_icon(self, button: QPushButton, icon_name: str):
         icon_path = os.path.join(self.base_dir, "icons", icon_name)
@@ -93,12 +105,6 @@ class ToolbarManager:
 
     def update_address_bar(self, path: str):
         self.address_bar.setText(path)
-
-    def get_search_text(self) -> str:
-        return self.search_bar.text()
-
-    def clear_search_bar(self):
-        self.search_bar.clear()
 
     def update_navigation_buttons(self, can_go_back: bool, can_go_forward: bool):
         self.back_btn.setEnabled(can_go_back)

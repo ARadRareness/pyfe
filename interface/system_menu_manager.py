@@ -72,7 +72,7 @@ class SystemMenuManager:
         menu_bar.addMenu(view_menu)
 
         # Add Search action to View menu
-        search_action = QAction("Search", self.parent)
+        search_action = QAction("Search Window", self.parent)
         search_action.triggered.connect(self.parent.show_search_window)
         view_menu.addAction(search_action)
 

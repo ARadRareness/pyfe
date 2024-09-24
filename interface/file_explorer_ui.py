@@ -25,6 +25,7 @@ from PySide6.QtCore import (
     QUrl,
     QFileInfo,
     QSortFilterProxyModel,
+    QRegularExpression,
 )
 
 import os
@@ -64,6 +65,7 @@ class FileExplorerUI(QMainWindow):
 
         self.navigation_manager.path_changed.connect(self.update_view)
         self.navigation_manager.path_changed.connect(self.update_history_window)
+        self.toolbar_manager.filter_changed.connect(self.apply_filter)
         self.init_interface()
 
         self.model = QStandardItemModel()
@@ -380,22 +382,17 @@ class FileExplorerUI(QMainWindow):
                 self.current_path,
             )
 
-    def search_files(self):
-        query = self.toolbar_manager.get_search_text()
-        if not query:
-            return
-
-        if not self.search_window:
-            self.search_window = SearchWindow(self)
-        elif not self.search_window.isVisible():
-            self.search_window.show()
-
-        self.search_window.set_name_input(query)
-        self.search_window.set_path_input(self.current_path)
-        self.search_window.start_search(self.current_path, query, "")
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
 
     def keyPressEvent(self, event: QKeyEvent):
-        if event.key() == Qt.Key_Backspace:
+        if event.key() == Qt.Key.Key_Backspace:
             if self.navigation_manager.handle_backspace():
                 event.accept()
                 return
@@ -429,5 +426,6 @@ class FileExplorerUI(QMainWindow):
     def show_search_window(self):
         if not self.search_window:
             self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
         self.search_window.show()
         self.search_window.activateWindow()
