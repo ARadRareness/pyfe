@@ -13,7 +13,7 @@
 - 🎬 Video to audio conversion (requires FFmpeg)
 
 ## 🧠 AI Features
-Using OpenAI or custom OpenAI-compatible endpoints, pyfe also supports:
+Using OpenAI or custom OpenAI-compatible endpoint, pyfe also supports:
 - 🎨 Generating images
 - 🎤 Transcribing audio
 - 🗣️ Creating audio narrations from text files

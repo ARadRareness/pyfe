@@ -71,6 +71,11 @@ class SystemMenuManager:
         view_menu = QMenu("View", self.parent)
         menu_bar.addMenu(view_menu)
 
+        # Add Search action to View menu
+        search_action = QAction("Search", self.parent)
+        search_action.triggered.connect(self.parent.show_search_window)
+        view_menu.addAction(search_action)
+
         # Add History Explorer action to View menu
         history_explorer_action = QAction("History Explorer", self.parent)
         history_explorer_action.triggered.connect(self.show_history_explorer)
@@ -116,7 +121,7 @@ class SystemMenuManager:
         api_key_layout = QHBoxLayout()
         api_key_label = QLabel("API Key:")
         api_key_input = QLineEdit()
-        api_key_input.setText(settings.value("api_key", ""))
+        api_key_input.setText(str(settings.value("api_key", "")))
         api_key_layout.addWidget(api_key_label)
         api_key_layout.addWidget(api_key_input)
         layout.addLayout(api_key_layout)
@@ -125,7 +130,7 @@ class SystemMenuManager:
         custom_url_layout = QHBoxLayout()
         custom_url_label = QLabel("Custom URL:")
         custom_url_input = QLineEdit()
-        custom_url_input.setText(settings.value("custom_url", ""))
+        custom_url_input.setText(str(settings.value("custom_url", "")))
         custom_url_layout.addWidget(custom_url_label)
         custom_url_layout.addWidget(custom_url_input)
         layout.addLayout(custom_url_layout)

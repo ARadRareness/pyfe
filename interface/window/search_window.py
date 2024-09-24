@@ -6,23 +6,29 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QAbstractItemView,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QFileDialog,
 )
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QFileInfo
 from PySide6.QtWidgets import QMainWindow
 import os
 import sys
+import math
 
 from PySide6.QtGui import QShowEvent, QCloseEvent, QKeyEvent
 
 
 class SearchThread(QThread):
-    result_found = Signal(str, str)
+    result_found = Signal(str, str, str, str, str)
     finished = Signal()
 
-    def __init__(self, root_path: str, query: str):
+    def __init__(self, root_path: str, name_query: str, content_query: str):
         super().__init__()
         self.root_path = root_path
-        self.include_terms, self.exclude_terms = self.parse_query(query)
+        self.content_query = content_query
+        self.include_terms, self.exclude_terms = self.parse_query(name_query)
         self.stop_flag = False
 
     def parse_query(self, query: str) -> tuple[list[str], list[str]]:
@@ -97,7 +103,18 @@ class SearchThread(QThread):
                     break
                 if self.match_query(name):
                     full_path = os.path.join(root, name)
-                    self.result_found.emit(name, full_path)
+                    file_info = QFileInfo(full_path)
+                    date_modified = file_info.lastModified().toString(
+                        "yyyy-MM-dd HH:mm:ss"
+                    )
+                    file_type = (
+                        "File folder" if file_info.isDir() else file_info.suffix()
+                    )
+                    size_kb = math.ceil(file_info.size() / 1024)
+                    size = f"{size_kb} KB" if file_info.isFile() else ""
+                    self.result_found.emit(
+                        name, full_path, date_modified, file_type, size
+                    )
         self.finished.emit()
 
     def is_protected_directory(self, dirname: str) -> bool:
@@ -124,40 +141,91 @@ class SearchWindow(QWidget):
     def __init__(self, parent: QMainWindow):
         super().__init__(parent)
         self.setWindowTitle("Search Results")
-        self.setGeometry(200, 200, 600, 400)
+        self.setGeometry(200, 200, 1000, 600)
         self.setWindowFlags(Qt.WindowType.Window)
 
         layout = QVBoxLayout()
-        self.status_label = QLabel("Searching...")
-        layout.addWidget(self.status_label)
 
+        # Add search input fields
+        search_layout = QHBoxLayout()
+
+        search_layout.addWidget(QLabel("Name:"))
+        self.name_input = QLineEdit()
+        search_layout.addWidget(self.name_input)
+
+        search_layout.addWidget(QLabel("Path:"))
+        self.path_input = QLineEdit()
+        self.path_input.setReadOnly(True)
+        search_layout.addWidget(self.path_input)
+
+        self.browse_button = QPushButton("Browse...")
+        self.browse_button.clicked.connect(self.browse_directory)
+        search_layout.addWidget(self.browse_button)
+
+        search_layout.addWidget(QLabel("Content:"))
+        self.content_input = QLineEdit()
+        search_layout.addWidget(self.content_input)
+
+        layout.addLayout(search_layout)
+
+        # Existing table widget setup
         self.table = QTableWidget()
-        self.table.setColumnCount(2)
-        self.table.setHorizontalHeaderLabels(["Name", "Path"])
-        self.table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Stretch
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(
+            ["Name", "Path", "Date Modified", "Type", "Size"]
         )
         self.table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Stretch
+            QHeaderView.ResizeMode.Interactive
         )
+        self.table.horizontalHeader().setStretchLastSection(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.cellDoubleClicked.connect(self.navigate_to_item)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
 
+        # Set column widths similar to the file explorer
+        self.table.setColumnWidth(0, 300)  # Name column
+        self.table.setColumnWidth(1, 300)  # Path column
+        self.table.setColumnWidth(2, 150)  # Date Modified column
+        self.table.setColumnWidth(3, 100)  # Type column
+        self.table.setColumnWidth(4, 100)  # Size column
+
+        self.table.setSortingEnabled(False)
+
         layout.addWidget(self.table)
+
+        # Move the status label to the bottom
+        self.status_label = QLabel("Searching...")
+        layout.addWidget(self.status_label)
+
         self.setLayout(layout)
 
         self.search_thread = None
         self.result_count = 0
 
-    def start_search(self, root_path: str, query: str):
+        # Connect input fields to search function
+        self.name_input.returnPressed.connect(self.start_search_from_input)
+        self.content_input.returnPressed.connect(self.start_search_from_input)
+
+    def browse_directory(self):
+        directory = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if directory:
+            # Convert to OS-specific path
+            directory = os.path.normpath(directory)
+            self.path_input.setText(directory)
+            self.start_search_from_input()
+
+    def start_search(self, root_path: str, name_query: str, content_query: str):
         self.stop_current_search()
         self.table.setRowCount(0)
         self.result_count = 0
         self.status_label.setText("Searching...")
-        self.search_thread = SearchThread(root_path, query)
+
+        if not os.path.isdir(root_path):
+            root_path = os.path.expanduser("~")
+
+        self.search_thread = SearchThread(root_path, name_query, content_query)
         self.search_thread.result_found.connect(self.add_result)
         self.search_thread.finished.connect(self.search_finished)
         self.search_thread.start()
@@ -175,14 +243,29 @@ class SearchWindow(QWidget):
             self.search_thread.deleteLater()
             self.search_thread = None
 
-    def add_result(self, name: str, path: str):
+    def add_result(
+        self,
+        name: str,
+        full_path: str,
+        date_modified: str,
+        file_type: str,
+        size: str,
+    ):
         row = self.table.rowCount()
         self.table.insertRow(row)
         self.table.setItem(row, 0, QTableWidgetItem(name))
+        self.table.setItem(row, 1, QTableWidgetItem(full_path))
+        self.table.setItem(row, 2, QTableWidgetItem(date_modified))
+        self.table.setItem(row, 3, QTableWidgetItem(file_type))
+        self.table.setItem(row, 4, QTableWidgetItem(size))
 
-        # Show only the directory path, not the full path
-        dir_path = os.path.dirname(path)
-        self.table.setItem(row, 1, QTableWidgetItem(dir_path))
+        # Set the full path as item data for later use
+        self.table.item(row, 0).setData(Qt.UserRole, full_path)
+
+        # Set custom sort role data for the size column
+        size_item = self.table.item(row, 4)
+        size_value = int(size.split()[0]) if size else -1
+        size_item.setData(Qt.UserRole, size_value)
 
         self.result_count += 1
         self.update_status_label()
@@ -194,14 +277,13 @@ class SearchWindow(QWidget):
         self.status_label.setText(f"Search complete. Found {self.result_count} results")
 
     def navigate_to_item(self, row: int, _: int):
-        fname = self.table.item(row, 0).text()
-        path = self.table.item(row, 1).text()
+        path = self.table.item(row, 0).data(Qt.UserRole)
         file_explorer: any = self.parent()
 
-        if os.path.isdir(os.path.join(path, fname)):
-            file_explorer.navigation_manager.navigate_to(os.path.join(path, fname))
-        else:
+        if os.path.isdir(path):
             file_explorer.navigation_manager.navigate_to(path)
+        else:
+            file_explorer.navigation_manager.navigate_to(os.path.dirname(path))
 
     def on_selection_changed(self):
         # Enable key press events when an item is selected
@@ -237,3 +319,23 @@ class SearchWindow(QWidget):
     def closeEvent(self, event: QCloseEvent) -> None:
         self.stop_current_search()
         super().closeEvent(event)
+
+    def start_search_from_input(self):
+        query = self.name_input.text()
+        path = self.path_input.text()
+        content = self.content_input.text()
+
+        if path:
+            self.start_search(path, query, content)
+
+    def set_name_input(self, query: str):
+        self.name_input.setText(query)
+
+    def set_path_input(self, path: str):
+        # Convert to OS-specific path
+        path = os.path.normpath(path)
+        self.path_input.setText(path)
+        self.start_search_from_input()
+
+    def set_content_input(self, content: str):
+        self.content_input.setText(content)

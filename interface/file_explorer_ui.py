@@ -390,7 +390,9 @@ class FileExplorerUI(QMainWindow):
         elif not self.search_window.isVisible():
             self.search_window.show()
 
-        self.search_window.start_search(self.current_path, query)
+        self.search_window.set_name_input(query)
+        self.search_window.set_path_input(self.current_path)
+        self.search_window.start_search(self.current_path, query, "")
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key_Backspace:
@@ -423,3 +425,9 @@ class FileExplorerUI(QMainWindow):
 
         # Call the parent class's closeEvent
         super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.show()
+        self.search_window.activateWindow()
