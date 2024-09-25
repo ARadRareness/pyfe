@@ -17,6 +17,8 @@ Using OpenAI or custom OpenAI-compatible endpoint, pyfe also supports:
 - 🎨 Generating images
 - 🎤 Transcribing audio
 - 🗣️ Creating audio narrations from text files
+- 💬 Chat interface for talking with an LLM
+- 🤖 AI agent for application control through commands
 
 ## 🛠️ Installation
 
