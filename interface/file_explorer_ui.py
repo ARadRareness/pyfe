@@ -29,6 +29,8 @@ from PySide6.QtCore import (
 )
 
 import os
+import sys
+import subprocess
 import math
 
 from interface.file_action_manager import FileActionManager
@@ -313,7 +315,10 @@ class FileExplorerUI(QMainWindow):
                     if file_info.isDir():
                         self.navigation_manager.navigate_to(new_path)
                     else:
-                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+                        if sys.platform == "darwin":  # macOS
+                            subprocess.call(["open", new_path])
+                        else:
+                            QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
 
     # Replace the existing on_double_click method with this one
     def on_double_click(self, index):
