@@ -31,7 +31,7 @@ class OpenAIClient:
             "messages": messages,
         }
         response = requests.post(
-            f"{self.base_url}/v1/chat/completions", headers=headers, json=data
+            f"{self.base_url}/chat/completions", headers=headers, json=data
         )
         return response.json()
 

@@ -18,6 +18,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from interface.file_explorer_ui import FileExplorerUI
 
+from interface.ai.chat_window import ChatWindow  # Add this import
+
 
 class SystemMenuManager:
     def __init__(self, parent: "FileExplorerUI"):
@@ -71,6 +73,11 @@ class SystemMenuManager:
         view_menu = QMenu("View", self.parent)
         menu_bar.addMenu(view_menu)
 
+        # Add Chat Window action to View menu
+        chat_window_action = QAction("Chat Window", self.parent)
+        chat_window_action.triggered.connect(self.show_chat_window)
+        view_menu.addAction(chat_window_action)
+
         # Add Search action to View menu
         search_action = QAction("Search Window", self.parent)
         search_action.triggered.connect(self.parent.show_search_window)
@@ -104,6 +111,14 @@ class SystemMenuManager:
             history_window.show()
         else:
             self.parent.history_window.activateWindow()
+
+    def show_chat_window(self):
+        if not self.parent.chat_window or not self.parent.chat_window.isVisible():
+            chat_window = ChatWindow(self.parent)
+            self.parent.set_chat_window(chat_window)
+            chat_window.show()
+        else:
+            self.parent.chat_window.activateWindow()
 
     def show_ai_settings_dialog(self):
         dialog = QDialog(self.parent)

@@ -29,8 +29,6 @@ from PySide6.QtCore import (
 )
 
 import os
-import sys
-import subprocess
 import math
 
 from interface.file_action_manager import FileActionManager
@@ -43,6 +41,7 @@ from interface.toolbar_manager import ToolbarManager  # Add this import
 from interface.ai.image_generator import ImageGenerator
 from interface.window.history_window import HistoryWindow
 from interface.window.search_window import SearchWindow
+from interface.ai.chat_window import ChatWindow
 
 
 class FileExplorerUI(QMainWindow):
@@ -86,6 +85,7 @@ class FileExplorerUI(QMainWindow):
 
         self.history_window = None
         self.search_window = None
+        self.chat_window = None
 
     def init_interface(self):
         main_layout = QVBoxLayout()
@@ -280,7 +280,10 @@ class FileExplorerUI(QMainWindow):
         name_item.setIcon(
             self.icon_mapper.get_icon(os.path.join(self.current_path, name))
         )
-
+        name_item = QStandardItem(name)
+        name_item.setIcon(
+            self.icon_mapper.get_icon(os.path.join(self.current_path, name))
+        )
         # Set custom sort role data
         name_item.setData(0 if is_parent else (1 if is_dir else 2), Qt.UserRole)
         name_item.setData(name.lower(), Qt.UserRole + 1)
@@ -315,10 +318,2697 @@ class FileExplorerUI(QMainWindow):
                     if file_info.isDir():
                         self.navigation_manager.navigate_to(new_path)
                     else:
-                        if sys.platform == "darwin":  # macOS
-                            subprocess.call(["open", new_path])
-                        else:
-                            QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_chat_window(self, chat_window: ChatWindow):
+        self.chat_window = chat_window
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Close the chat window if it's open
+        if self.chat_window and self.chat_window.isVisible():
+            self.chat_window.close()
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
+
+    # Replace the existing on_double_click method with this one
+    def on_double_click(self, index):
+        if QApplication.mouseButtons() == Qt.LeftButton:
+            self.on_item_activated(index)
+
+    def on_favorite_click(self, index):
+        item = self.favorites_manager.favorites_model.itemFromIndex(index)
+        if item and item.data(Qt.UserRole + 1) != "delimiter":
+            path = item.data(Qt.UserRole)
+            if QDir(path).exists():
+                self.navigation_manager.navigate_to(path)
+
+    def navigate_to(self, path):
+        if path != self.current_path:
+            self.history_backward.append(self.current_path)
+            self.history_forward.clear()
+            self.current_path = path
+            self.update_view()
+
+    def go_back(self):
+        if self.history_backward:
+            self.history_forward.append(self.current_path)
+            self.current_path = self.history_backward.pop()
+            self.update_view()
+
+    def go_forward(self):
+        if self.history_forward:
+            self.history_backward.append(self.current_path)
+            self.current_path = self.history_forward.pop()
+            self.update_view()
+
+    def go_up(self):
+        parent_path = QDir(self.current_path).filePath("..")
+        self.navigate_to(QDir(parent_path).absolutePath())
+
+    def update_navigation_buttons(self):
+        can_go_back = self.navigation_manager.can_go_back()
+        can_go_forward = self.navigation_manager.can_go_forward()
+        can_go_up = self.navigation_manager.can_go_up()
+        self.toolbar_manager.update_navigation_buttons(can_go_back, can_go_forward)
+        self.toolbar_manager.update_up_button(can_go_up)
+
+    def change_directory(self, new_path):
+        if QDir(new_path).exists():
+            self.navigation_manager.navigate_to(new_path)
+
+    def set_history_window(self, history_window: HistoryWindow):
+        self.history_window = history_window
+
+    def show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if index.isValid():
+            self.file_action_manager.show_context_menu(
+                position,
+                self.tree_view,
+                self.model,
+                self.proxy_model,
+                self.current_path,
+                self.favorites_manager,
+            )
+        else:
+            self.file_action_manager.show_empty_context_menu(
+                position,
+                self.tree_view,
+                self.current_path,
+            )
+
+    def apply_filter(self, filter_text):
+        # Create a case-insensitive regular expression
+        regex = QRegularExpression(
+            QRegularExpression.escape(filter_text),
+            QRegularExpression.CaseInsensitiveOption,
+        )
+        self.proxy_model.setFilterRegularExpression(regex)
+        self.proxy_model.setFilterKeyColumn(0)  # Filter on the first column (Name)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_Backspace:
+            if self.navigation_manager.handle_backspace():
+                event.accept()
+                return
+        super().keyPressEvent(event)
+
+    def rename_selected(self):
+        selected_indexes = self.tree_view.selectedIndexes()
+        if selected_indexes:
+            source_index = self.proxy_model.mapToSource(selected_indexes[0])
+            item = self.model.itemFromIndex(source_index)
+            if item:
+                self.file_action_manager.rename_item(item, self.current_path)
+
+    def update_history_window(self):
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.update_history()
+
+    def closeEvent(self, event: QCloseEvent):
+        # Close the history window if it's open
+        if self.history_window and self.history_window.isVisible():
+            self.history_window.close()
+
+        # Close the search window if it's open
+        if self.search_window:
+            self.search_window.close()
+            self.search_window = None
+
+        # Call the parent class's closeEvent
+        super().closeEvent(event)
+
+    def show_search_window(self):
+        if not self.search_window:
+            self.search_window = SearchWindow(self)
+        self.search_window.set_path_input(self.current_path, search=False)
+        self.search_window.show()
+        self.search_window.activateWindow()
+
+        name_item.setData(0 if is_parent else (1 if is_dir else 2), Qt.UserRole)
+        name_item.setData(name.lower(), Qt.UserRole + 1)
+
+        date_item = QStandardItem(date)
+        date_item.setData(
+            QFileInfo(os.path.join(self.current_path, name)).lastModified(), Qt.UserRole
+        )
+
+        type_item = QStandardItem(file_type)
+        type_item.setData(file_type.lower(), Qt.UserRole)
+
+        size_item = QStandardItem(size)
+        size_item.setData(int(size.split()[0]) if size else -1, Qt.UserRole)
+
+        self.model.appendRow([name_item, date_item, type_item, size_item])
+
+    def on_item_activated(self, index):
+        # Convert the proxy model index to the source model index
+        source_index = self.proxy_model.mapToSource(index)
+        item = self.model.itemFromIndex(source_index)
+        if item:
+            file_name = item.text()
+            if file_name == "..":
+                self.navigation_manager.go_up()
+            else:
+                new_path = os.path.normpath(
+                    QDir(self.navigation_manager.current_path).filePath(file_name)
+                )
+                file_info = QFileInfo(new_path)
+                if file_info.exists():
+                    if file_info.isDir():
+                        self.navigation_manager.navigate_to(new_path)
+                    else:
+                        QDesktopServices.openUrl(QUrl.fromLocalFile(new_path))
 
     # Replace the existing on_double_click method with this one
     def on_double_click(self, index):
