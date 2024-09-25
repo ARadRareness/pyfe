@@ -38,9 +38,13 @@ class ControllerAgent:
             # print("ACTION: ", action)
 
             if not "function" in action:
-                response = action["response"]
-                break
-            if action["function"] == "answer":
+                action_chat_history.append(
+                    {
+                        "role": "user",
+                        "content": "You did not provide a function, please try again. Remember to output the function as function§ (function name) on a new line, and the arguments as argument_name§ (value of the argument) on a new line.",
+                    }
+                )
+            elif action["function"] == "answer":
                 response = action["response"]
                 break
             elif action["function"] == "find_directory":
@@ -49,6 +53,14 @@ class ControllerAgent:
                 result = self.find_file(action["search_value"])
             elif action["function"] == "move_to_folder":
                 result = self.move_to_folder(action["folder_path"])
+            elif action["function"] == "go_up":
+                result = self.go_up()
+            elif action["function"] == "go_back":
+                result = self.go_back()
+            elif action["function"] == "go_forward":
+                result = self.go_forward()
+            elif action["function"] == "current_directory":
+                result = self.current_directory()
             else:
                 result = "Unknown action"
 
@@ -74,19 +86,23 @@ class ControllerAgent:
 
 You have access to the following functions that you can incorporate into your plan:
 
-1. find_directory(search_value: str): Search for directories containing the given search value in their name.
-2. find_file(search_value: str): Search for files containing the given search value in their name.
-3. move_to_folder(folder_path: str): Move the user to the specified folder path. Only use folder paths that have been previously determined using find_directory.
-4. answer(response: str): Provide a final answer to the user, summarizing the actions taken and addressing their request.
+1. find_directory(search_value: str): Search globally for directories containing the given search value in their name, only use this if you are not able to find what you are looking for any other way.
+2. move_to_folder(folder_path: str): Move the user to the specified folder path. Only use this function if you are sure that the path is correct.
+3. go_up(): Tries to move the user up one directory level.
+4. go_back(): Tries to move the user back one step in the directory history.
+5. go_forward(): Tries to move the user forward one step in the directory history.
+6. current_directory(): Returns the current directory the user is in.
+7. answer(response: str): Provide a final answer to the user, summarizing the actions taken and addressing their request.
 
-When creating your plan, consider the following guidelines:
-- Analyze the user's request and the context from previous messages.
-- Break down the task into logical steps.
-- Utilize the available functions in the most efficient order.
-- Be thorough and consider potential edge cases or alternative approaches.
-- Always conclude your plan with the answer function to provide a final response to the user.
+Write out your plan in a numbered easy to follow list.
+An example plan for the user request "Find the documents folder" could be:
 
-Your goal is to create the most effective and comprehensive plan possible to address the user's needs.""",
+1. Check if we are already in the documents folder, if so, use answer with the response "I am already in the documents folder"
+2. If not, use find_directory with the search value "documents"
+3. If find_directory finds the documents folder, use move_to_folder with the path to the documents folder
+4. If we were successful in moving to the documents folder, use answer with the response "I have moved you to the documents folder"
+5. If we were not successful in moving to the documents folder, use answer with the response "I couldn't find the documents folder"
+""",
         }
 
         # Insert the system message at the beginning of the chat history
@@ -110,18 +126,22 @@ Your goal is to create the most effective and comprehensive plan possible to add
             "content": """You are an AI assistant that excels at determining the next best action based on the current information and available functions. Your task is to analyze the situation and decide which function to use next.
 
 Available functions:
-1. find_directory(search_value: str): Search for directories containing the given search value in their name.
-2. find_file(search_value: str): Search for files containing the given search value in their name.
-3. move_to_folder(folder_path: str): Move the user to the specified folder path. Only use folder paths that have been previously determined using find_directory.
-4. answer(response: str): Provide a final answer to the user, summarizing the actions taken and addressing their request.
+1. find_directory(search_value: str): Search globally for directories containing the given search value in their name, only use this if you are not able to find what you are looking for any other way.
+2. move_to_folder(folder_path: str): Move the user to the specified folder path. Only use this function if you are sure that the path is correct.
+3. go_up(): Tries to move the user up one directory level.
+4. go_back(): Tries to move the user back one step in the directory history.
+5. go_forward(): Tries to move the user forward one step in the directory history.
+6. current_directory(): Returns the current directory the user is in.
+7. answer(response: str): Provide a final answer to the user, summarizing the actions taken and addressing their request.
 
 When deciding on the next action, follow these steps:
-1. Analyze the current situation and the plan.
+1. Analyze the current situation and adhere to the provided plan.
 2. Consider what you want to achieve with the next action.
 3. Evaluate why this action is the best choice at this moment.
 4. Think through potential consequences and how this action contributes to the overall goal.
 5. Make sure the chosen action aligns with the plan and progresses towards the final objective.
-6. Make sure to always write out the action you deem to be the best choice.
+6. Always think through if you have already fulfilled the objective, and if it's time to answer.
+7. Make sure to always write out the action you deem to be the best choice.
 
 After your reasoning, provide your decision using the following format:
 
@@ -129,14 +149,21 @@ function§ (name of the function to use)
 argument_name§ (value of the argument)
 
 For example:
+"Find the documents folder"
+
 function§ find_directory
 search_value§ documents
 
 Or:
+"Write what you have done so far"
 function§ answer
 response§ Here's a summary of the actions taken and the final result...
 
-Remember to think through your decision carefully before providing the final answer.""",
+Or:
+"I want to go back to the previous folder"
+function§ go_back
+
+Remember to think through your decision carefully before providing the final answer, and always consider if the objective has been met and it's time to use the answer function.""",
         }
 
         # Insert the system message at the beginning of the chat history
@@ -218,5 +245,28 @@ Remember to think through your decision carefully before providing the final ans
         return f"Found file: {search_value}.txt"
 
     def move_to_folder(self, folder_path: str) -> str:
-        self.chat_window.set_current_directory(folder_path)
-        return f"Moved to folder: {folder_path}"
+        if self.chat_window.set_current_directory(folder_path):
+            return f"Moved to folder: {folder_path}"
+        else:
+            return "Failed to move to folder, is the path correct?"
+
+    def go_up(self) -> str:
+        if self.chat_window.go_up():
+            return "Moved up one directory level"
+        else:
+            return "Failed to move up, are you already at the root?"
+
+    def go_back(self) -> str:
+        if self.chat_window.go_back():
+            return "Navigated back to the previous directory"
+        else:
+            return "Failed to navigate back, you might already be at the start of the history."
+
+    def go_forward(self) -> str:
+        if self.chat_window.go_forward():
+            return "Navigated forward to the next directory"
+        else:
+            return "Failed to navigate forward, you might already be at the end of the history."
+
+    def current_directory(self) -> str:
+        return "The current directory is: " + self.chat_window.get_current_directory()

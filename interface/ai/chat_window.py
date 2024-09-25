@@ -38,7 +38,7 @@ class AIResponseThread(QThread):
 class ChatWindow(QWidget):
     def __init__(self, parent: "FileExplorerUI"):
         super().__init__()
-        self.parent = parent
+        self.parent: "FileExplorerUI" = parent
         self.setWindowTitle("AI Chat")
         self.setGeometry(200, 200, 600, 400)
 
@@ -121,9 +121,21 @@ class ChatWindow(QWidget):
         return super().eventFilter(obj, event)
 
     def set_current_directory(self, folder_path: str):
-        self.parent.change_directory(folder_path)
+        return self.parent.change_directory(folder_path)
+
+    def go_up(self):
+        return self.parent.go_up()
+
+    def go_back(self):
+        return self.parent.go_back()
+
+    def go_forward(self):
+        return self.parent.go_forward()
 
     def get_favorite_directories(self):
         if self.parent and hasattr(self.parent, "favorites_manager"):
             return self.parent.get_favorite_directories()
         return []
+
+    def get_current_directory(self):
+        return self.parent.get_current_directory()
