@@ -3022,25 +3022,6 @@ class FileExplorerUI(QMainWindow):
             if QDir(path).exists():
                 self.navigation_manager.navigate_to(path)
 
-    def navigate_to(self, path):
-        if path != self.current_path:
-            self.history_backward.append(self.current_path)
-            self.history_forward.clear()
-            self.current_path = path
-            self.update_view()
-
-    def go_back(self):
-        if self.history_backward:
-            self.history_forward.append(self.current_path)
-            self.current_path = self.history_backward.pop()
-            self.update_view()
-
-    def go_forward(self):
-        if self.history_forward:
-            self.history_backward.append(self.current_path)
-            self.current_path = self.history_forward.pop()
-            self.update_view()
-
     def go_up(self):
         parent_path = QDir(self.current_path).filePath("..")
         self.navigate_to(QDir(parent_path).absolutePath())
@@ -3124,3 +3105,6 @@ class FileExplorerUI(QMainWindow):
         self.search_window.set_path_input(self.current_path, search=False)
         self.search_window.show()
         self.search_window.activateWindow()
+
+    def get_favorite_directories(self):
+        return self.favorites_manager.get_favorite_directories()

@@ -184,3 +184,13 @@ class FavoritesManager:
         if ok and new_name:
             item.setText(new_name)
             self.save_starred_folders()
+
+    def get_favorite_directories(self) -> list[str]:
+        favorite_dirs = []
+        for row in range(self.favorites_model.rowCount()):
+            item = self.favorites_model.item(row)
+            if item.data(Qt.ItemDataRole.UserRole + 1) != "delimiter":
+                path = item.data(Qt.ItemDataRole.UserRole)
+                if os.path.isdir(path):
+                    favorite_dirs.append(path)
+        return favorite_dirs
