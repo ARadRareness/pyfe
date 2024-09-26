@@ -48,11 +48,11 @@ class ControllerAgent:
                 response = action["response"]
                 break
             elif action["function"] == "find_directory":
-                result = self.find_directory(action["search_value"])
+                result = self.find_directory(action.get("search_value", ""))
             elif action["function"] == "find_file":
-                result = self.find_file(action["search_value"])
+                result = self.find_file(action.get("search_value", ""))
             elif action["function"] == "move_to_folder":
-                result = self.move_to_folder(action["folder_path"])
+                result = self.move_to_folder(action.get("folder_path", ""))
             elif action["function"] == "go_up":
                 result = self.go_up()
             elif action["function"] == "go_back":
@@ -188,6 +188,9 @@ Remember to think through your decision carefully before providing the final ans
         return action_dict, action
 
     def find_directory(self, search_value: str) -> str:
+        if not search_value:
+            return "No search value provided"
+
         results = []
         searched_paths = set()
 
@@ -241,10 +244,16 @@ Remember to think through your decision carefully before providing the final ans
         return result_str
 
     def find_file(self, search_value: str) -> str:
+        if not search_value:
+            return "No search value provided"
+
         # Dummy implementation
         return f"Found file: {search_value}.txt"
 
     def move_to_folder(self, folder_path: str) -> str:
+        if not folder_path:
+            return "No folder path provided"
+
         if self.chat_window.set_current_directory(folder_path):
             return f"Moved to folder: {folder_path}"
         else:

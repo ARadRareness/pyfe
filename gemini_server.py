@@ -36,6 +36,29 @@ app = Flask(__name__)
 load_dotenv()
 
 
+def package_messages(history):
+    new_history = []
+    for message in history:
+        if message["role"] == "system":
+            new_history += [
+                Content(
+                    parts=[Part.from_text("SYSTEM MESSAGE: " + message["content"])],
+                    role="user",
+                ),
+                Content(
+                    parts=[Part.from_text(message["content"])],
+                    role=message["assistant"],
+                ),
+            ]
+        else:
+            new_history += [
+                Content(
+                    parts=[Part.from_text(message["content"])], role=message["role"]
+                )
+            ]
+    return new_history
+
+
 @app.route("/chat/completions", methods=["POST"])
 def chat_completions():
     data = request.json
@@ -53,10 +76,7 @@ def chat_completions():
     last_message = conversation[-1] if conversation else None
 
     # Convert history to Part objects
-    history: List[Content] = [
-        Content(parts=[Part.from_text(message["content"])], role=message["role"])
-        for message in history
-    ]
+    history: List[Content] = package_messages(history)
 
     chat = model.start_chat(history=history)
 
