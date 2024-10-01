@@ -333,6 +333,10 @@ class FileExplorerUI(QMainWindow):
     def get_current_directory(self):
         return self.navigation_manager.current_path
 
+    def list_directory(self):
+        path = self.navigation_manager.current_path
+        return os.listdir(path)
+
     # Replace the existing on_double_click method with this one
     def on_double_click(self, index):
         if QApplication.mouseButtons() == Qt.LeftButton:

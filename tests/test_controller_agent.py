@@ -1,7 +1,7 @@
 import os
 from typing import Dict, List
 import unittest
-from interface.ai.controller_agent_react import ControllerAgentReact
+from interface.ai.controller_agent_react import ControllerAgent
 
 # HOW TO RUN TESTS:
 # python -m unittest tests.test_controller_agent
@@ -10,32 +10,44 @@ from interface.ai.controller_agent_react import ControllerAgentReact
 class TestControllerAgent(unittest.TestCase):
     def setUp(self):
         self.computer = Computer()
-        self.controller_agent = ControllerAgentReact(self.computer)
+        self.controller_agent = ControllerAgent(self.computer)
 
     def test_find_and_open_folder_auto(self):
         self._run_agent(
-            "Can you find and open the hello folder for me?",
+            "Can you find and open the woop folder for me?",
         )
-
-        self.assertEqual(self.computer.get_current_directory(), "C:\\hello")
-        self.assertLessEqual(self.computer.get_action_count(), 5)
+        self.assertLessEqual(self.controller_agent.total_actions, 5)
+        self.assertEqual(self.computer.get_current_directory(), "C:\\woop")
 
     def test_go_up(self):
         self.computer.change_directory("C:\\woop\\bla")
         self._run_agent("Can you go up one directory?")
         self.assertEqual(self.computer.get_current_directory(), "C:\\woop")
-        self.assertLessEqual(self.computer.get_action_count(), 5)
+        self.assertLessEqual(self.controller_agent.total_actions, 5)
 
-    def xtest_go_back(self):  # This test is failing because the agent does weird stuff
+    def test_list_directory(self):
+        self.computer.change_directory("C:\\")
+        self._run_agent("Go to the directory starting with 'he'?")
+        self.assertEqual(self.computer.get_current_directory(), "C:\\hello")
+        self.assertLessEqual(self.controller_agent.total_actions, 5)
+
+    def test_list_directory2(self):
+        self.computer.change_directory("C:\\")
+        self._run_agent(
+            "Go to the hello folder and confirm that there is a file called 'world.txt'"
+        )
+        self.assertEqual(self.computer.get_current_directory(), "C:\\hello")
+        self.assertLessEqual(self.controller_agent.total_actions, 7)
+
+    def test_go_back(self):  # This test is failing because the agent does weird stuff
         self.computer.change_directory("C:\\woop")
         self.computer.change_directory("C:\\woop\\bla")
         self._run_agent("Can you go back a directory?")
         self.assertEqual(self.computer.get_current_directory(), "C:\\woop")
 
     def _run_agent(self, query: str):
-        self.computer.reset_count()
         self.controller_agent.process_query(query, [])
-        print(f"Agent ran for {self.computer.get_action_count() + 1} steps")
+        print(f"Agent ran for {self.controller_agent.total_actions} steps")
 
 
 class Computer:
@@ -72,20 +84,11 @@ class Computer:
                 "file_type": "folder",
             },
         }
-        self.action_count = 0
 
     def reset_computer(self):
         self.current_directory = "C:\\"
-        self.action_count = 0
-
-    def reset_count(self):
-        self.action_count = 0
-
-    def get_action_count(self):
-        return self.action_count
 
     def change_directory(self, directory: str):
-        self.action_count += 1
         if directory not in self.files:
             return False
 
@@ -99,11 +102,17 @@ class Computer:
         return True
 
     def get_current_directory(self):
-        self.action_count += 1
         return self.current_directory
 
+    def list_directory(self):
+        current_dir = self.current_directory
+        contents = []
+        for path, info in self.files.items():
+            if os.path.dirname(path) == current_dir and path != current_dir:
+                contents.append(info["name"])
+        return contents
+
     def go_up(self):
-        self.action_count += 1
         parent_directory = os.path.dirname(self.current_directory)
 
         if parent_directory in self.files:
@@ -113,7 +122,6 @@ class Computer:
         return False
 
     def go_back(self):
-        self.action_count += 1
         if self.history_backward:
             self.history_forward.append(self.current_directory)
             self.current_directory = self.history_backward.pop()
@@ -121,7 +129,6 @@ class Computer:
         return False
 
     def go_forward(self):
-        self.action_count += 1
         if self.history_forward:
             self.history_backward.append(self.current_directory)
             self.current_directory = self.history_forward.pop()
@@ -129,11 +136,10 @@ class Computer:
         return False
 
     def find_directory(self, search_value: str) -> List[Dict[str, str]]:
-        self.action_count += 1
         results = []
-        for file in self.files:
-            if search_value in self.files[file]["name"]:
-                file_info = self.files[file]
+        for file, info in self.files.items():
+            if search_value in info["name"] and info["file_type"] == "folder":
+                file_info = info.copy()
                 file_info["path"] = file
                 results.append(file_info)
         return results

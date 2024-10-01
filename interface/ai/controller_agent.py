@@ -1,9 +1,6 @@
 from interface.ai.openai_client import OpenAIClient
 from typing import List, Dict, Tuple
 from interface.constants import settings
-import os
-import math
-from PySide6.QtCore import QFileInfo
 
 
 class ControllerAgent:
@@ -14,6 +11,19 @@ class ControllerAgent:
             settings.value("custom_url", "https://api.openai.com/v1"),
         )
         self.max_actions = 10
+
+        self.action_responses = {
+            "change_directory_no_argument": "No folder path provided",
+            "change_directory_incorrect_path": "Failed to move to folder, is the path correct?",
+            "change_directory_success": "Moved to folder: {folder_path}",
+            "go_up_failure": "Failed to move up, are you already at the root?",
+            "go_up_success": "Moved up one directory level",
+            "go_back_failure": "Failed to navigate back, you might already be at the start of the history.",
+            "go_back_success": "Navigated back to the previous directory",
+            "go_forward_failure": "Failed to navigate forward, you might already be at the end of the history.",
+            "go_forward_success": "Navigated forward to the next directory",
+            "current_directory": "Current directory: {directory_path}",
+        }
 
     def process_query(self, query: str, chat_history: List[Dict[str, str]]) -> str:
         plan = self.create_plan(query, chat_history)
@@ -33,6 +43,7 @@ class ControllerAgent:
         )
 
         while actions_taken < self.max_actions:
+            print(f"### STEP {actions_taken+1} ###")
             action, message = self.get_next_action(action_chat_history)
             action_chat_history.append({"role": "assistant", "content": message})
             # print("ACTION: ", action)
@@ -51,8 +62,8 @@ class ControllerAgent:
                 result = self.find_directory(action.get("search_value", ""))
             elif action["function"] == "find_file":
                 result = self.find_file(action.get("search_value", ""))
-            elif action["function"] == "move_to_folder":
-                result = self.move_to_folder(action.get("folder_path", ""))
+            elif action["function"] == "change_directory":
+                result = self.change_directory(action.get("folder_path", ""))
             elif action["function"] == "go_up":
                 result = self.go_up()
             elif action["function"] == "go_back":
@@ -67,7 +78,7 @@ class ControllerAgent:
             action_chat_history.append(
                 {"role": "user", "content": "The result of the function was: " + result}
             )
-            print("RESULT: ", result)
+            print(f"RESULT: {result}\n")
             actions_taken += 1
 
         if not response:
@@ -87,7 +98,7 @@ class ControllerAgent:
 You have access to the following functions that you can incorporate into your plan:
 
 1. find_directory(search_value: str): Search globally for directories containing the given search value in their name, only use this if you are not able to find what you are looking for any other way.
-2. move_to_folder(folder_path: str): Move the user to the specified folder path. Only use this function if you are sure that the path is correct.
+2. change_directory(folder_path: str): Change the current directory to the specified folder path. Only use this function if you are sure that the path is correct.
 3. go_up(): Tries to move the user up one directory level.
 4. go_back(): Tries to move the user back one step in the directory history.
 5. go_forward(): Tries to move the user forward one step in the directory history.
@@ -127,7 +138,7 @@ An example plan for the user request "Find the documents folder" could be:
 
 Available functions:
 1. find_directory(search_value: str): Search globally for directories containing the given search value in their name, only use this if you are not able to find what you are looking for any other way.
-2. move_to_folder(folder_path: str): Move the user to the specified folder path. Only use this function if you are sure that the path is correct.
+2. change_directory(folder_path: str): Change the current directory to the specified folder path. Only use this function if you are sure that the path is correct.
 3. go_up(): Tries to move the user up one directory level.
 4. go_back(): Tries to move the user back one step in the directory history.
 5. go_forward(): Tries to move the user forward one step in the directory history.
@@ -187,52 +198,9 @@ Remember to think through your decision carefully before providing the final ans
         print("ACTION DICT: ", action_dict)
         return action_dict, action
 
-    def find_directory(self, search_value: str) -> str:
-        if not search_value:
-            return "No search value provided"
-
-        results = []
-        searched_paths = set()
-
-        for root_path in self.chat_window.parent.get_favorite_directories()[::-1]:
-            print("ROOT PATH: ", root_path)
-            folder_results = []
-            for root, dirs, _ in os.walk(root_path):
-                # Check if this path or any parent path has been searched
-
-                if root in searched_paths:
-                    # print("SKIPPING: ", root)
-                    continue
-
-                searched_paths.add(root)
-
-                for dir_name in dirs:
-                    if search_value.lower() in dir_name.lower() and os.path.isdir(
-                        os.path.join(root, dir_name)
-                    ):
-                        full_path = os.path.join(root, dir_name)
-                        file_info = QFileInfo(full_path)
-                        date_modified = file_info.lastModified().toString(
-                            "yyyy-MM-dd HH:mm:ss"
-                        )
-                        folder_results.append(
-                            {
-                                "name": dir_name,
-                                "path": full_path,
-                                "date_modified": date_modified,
-                            }
-                        )
-
-                        if len(folder_results) >= 10:
-                            break
-
-                if len(folder_results) >= 10:
-                    break
-
-            results.extend(folder_results)
-            if len(results) >= 10:
-                break
-
+    def get_find_directory_message(
+        self, search_value: str, results: List[Dict[str, str]]
+    ):
         if not results:
             return f"No directories found containing '{search_value}'"
 
@@ -243,6 +211,14 @@ Remember to think through your decision carefully before providing the final ans
 
         return result_str
 
+    def find_directory(self, search_value: str) -> str:
+        if not search_value:
+            return "No search value provided"
+
+        results = self.chat_window.find_directory(search_value)
+
+        return self.get_find_directory_message(search_value, results)
+
     def find_file(self, search_value: str) -> str:
         if not search_value:
             return "No search value provided"
@@ -250,32 +226,36 @@ Remember to think through your decision carefully before providing the final ans
         # Dummy implementation
         return f"Found file: {search_value}.txt"
 
-    def move_to_folder(self, folder_path: str) -> str:
+    def change_directory(self, folder_path: str) -> str:
         if not folder_path:
-            return "No folder path provided"
+            return self.action_responses["change_directory_no_argument"]
 
-        if self.chat_window.set_current_directory(folder_path):
-            return f"Moved to folder: {folder_path}"
+        if self.chat_window.change_directory(folder_path):
+            return self.action_responses["change_directory_success"].format(
+                folder_path=folder_path
+            )
         else:
-            return "Failed to move to folder, is the path correct?"
+            return self.action_responses["change_directory_incorrect_path"]
 
     def go_up(self) -> str:
         if self.chat_window.go_up():
-            return "Moved up one directory level"
+            return self.action_responses["go_up_success"]
         else:
-            return "Failed to move up, are you already at the root?"
+            return self.action_responses["go_up_failure"]
 
     def go_back(self) -> str:
         if self.chat_window.go_back():
-            return "Navigated back to the previous directory"
+            return self.action_responses["go_back_success"]
         else:
-            return "Failed to navigate back, you might already be at the start of the history."
+            return self.action_responses["go_back_failure"]
 
     def go_forward(self) -> str:
         if self.chat_window.go_forward():
-            return "Navigated forward to the next directory"
+            return self.action_responses["go_forward_success"]
         else:
-            return "Failed to navigate forward, you might already be at the end of the history."
+            return self.action_responses["go_forward_failure"]
 
     def current_directory(self) -> str:
-        return "The current directory is: " + self.chat_window.get_current_directory()
+        return self.action_responses["current_directory"].format(
+            directory_path=self.chat_window.get_current_directory()
+        )

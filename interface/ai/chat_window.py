@@ -184,3 +184,6 @@ class ChatWindow(QWidget):
             if len(results) >= 10:
                 break
         return results
+
+    def list_directory(self):
+        return self.parent.list_directory()

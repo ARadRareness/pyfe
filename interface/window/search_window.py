@@ -207,7 +207,7 @@ class SearchWindow(QWidget):
         layout.addWidget(self.table)
 
         # Move the status label to the bottom
-        self.status_label = QLabel("Searching...")
+        self.status_label = QLabel("")  # Initialize with an empty string
         layout.addWidget(self.status_label)
 
         self.setLayout(layout)

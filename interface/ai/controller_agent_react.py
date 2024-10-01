@@ -4,15 +4,21 @@ from interface.constants import settings
 
 
 PROMPT_EXAMPLES = """Task: Go to the folder "hello"
-Thought 1: In order to go to the folder "hello", I need to search for it, and then change the current directory to it.
-Action 1: find_directory § hello
-Observation 1: Found 1 directories containing 'hello':
+Thought 1: In order to go to the image folder, I need to first check if it exists in the current directory.
+Action 1: list_directory
+Observation 1: Current directory: C:\\current_user, Contents of the current directory:
+- image
+- documents
+- downloads
+Thought 2: The folder "hello" is not in the current directory, I therefore need to search for it, and then change the current directory to it.
+Action 2: find_directory § hello
+Observation 2: Found 1 directories containing 'hello':
 - hello (Path: C:\\hello, Modified: 2024-02-20)
-Thought 2: I have found the folder "hello", now I need to change the current directory to it.
-Action 2: change_directory § C:\\hello
-Observation 2: Successfully changed the current directory to "C:\\hello"
-Thought 3: I have successfully reached the folder "hello", I can now report this to the user.
-Action 3: answer § I have changed the current directory to the folder "hello"
+Thought 3: I have found the folder "hello", now I need to change the current directory to it.
+Action 3: change_directory § C:\\hello
+Observation 3: Successfully changed the current directory to "C:\\hello"
+Thought 4: I have successfully reached the folder "hello", I can now report this to the user.
+Action 4: answer § I have changed the current directory to the folder "hello"
 
 Task: Go up one directory
 Thought 1: In order to go up one directory, I need to use the go_up function.
@@ -20,6 +26,19 @@ Action 1: go_up
 Observation 1: Successfully moved up one directory level, current directory: C:\\.
 Thought 2: I have successfully gone up one directory level, I can now report this to the user.
 Action 2: answer § I have gone up one directory to C:\\.
+
+Task: Go to the image folder
+Thought 1: In order to go to the image folder, I need to first check if it exists in the current directory.
+Action 1: list_directory
+Observation 1: Current directory: C:\\, Contents of the current directory:
+- image
+- documents
+- downloads
+Thought 2: The image folder exists in the current directory, I can now change to it.
+Action 2: change_directory § C:\\image
+Observation 2: Successfully changed the current directory to "C:\\image"
+Thought 3: I have successfully reached the folder "hello", I can now report this to the user.
+Action 3: answer § I have changed the current directory to the folder "C:\\hello"
 """
 
 REACT_PROMPT = """SYSTEM PROMPT: You are an AI assistant that excels at solving problems step-by-step using available functions. Your task is to analyze the current situation and determine the next best action to take.
@@ -30,10 +49,11 @@ Available functions:
 1. find_directory search_value: Search globally for directories containing the given search value.
 2. change_directory folder_path: Change the current directory to the specified folder path. If successful, returns the new directory path.
 3. go_up: Move up one directory level. If successful, returns the new directory path.
-4. go_back: Move back one step in the directory history. If successful, returns the new directory path.
-5. go_forward: Move forward one step in the directory history. If successful, returns the new directory path.
+4. go_back: Move to the previously visited directory in the navigation history.
+5. go_forward: Move to the next directory in the navigation history, if any.
 6. current_directory: Get the current directory path.
-7. answer (response: str): Provide a final answer to the user's task.
+7. list_directory: List all files and folders in the current directory.
+8. answer (response: str): Provide a final answer to the user's task.
 
 Here are some examples:
 {examples}
@@ -58,6 +78,8 @@ class ControllerAgent:
         )
         self.max_actions = 10
 
+        self.total_actions = 0
+
         self.action_responses = {
             "change_directory_no_argument": "No folder path provided.",
             "change_directory_incorrect_path": "Failed to move to folder, is the path correct?",
@@ -69,6 +91,7 @@ class ControllerAgent:
             "go_forward_failure": "Failed to navigate forward, you might already be at the end of the history.",
             "go_forward_success": "Successfully navigated forward to the next directory.",
             "current_directory": "Current directory: {directory_path}",
+            "list_directory": "Current directory: {current_directory}\nContents of the current directory:\n{directory_contents}",
         }
 
         self.scratchpad = """
@@ -138,6 +161,8 @@ class ControllerAgent:
             return self.current_directory(), False
         elif function == "answer":
             return argument, True
+        elif function == "list_directory":
+            return self.list_directory(), False
         else:
             print(f"Warning: Unknown action ({function}) was provided.")
             return f"Unknown action: {function}", True
@@ -149,11 +174,13 @@ class ControllerAgent:
 
         # for i in range(self.max_actions):
         scratchpad = ""
+        self.total_actions = 0
 
         for i in range(1, self.max_actions + 1):
             thought, action = self.retrieve_action(query, scratchpad, i)
             scratchpad += f"Thought {i}: {thought}\nAction {i}: {action}\n"
             observation, is_final = self.perform_action(action)
+            self.total_actions += 1
 
             if not is_final:
                 scratchpad += f"Observation {i}: {observation}\n"
@@ -161,6 +188,7 @@ class ControllerAgent:
             else:
                 print(observation, is_final)
                 print("SCRATCHPAD:", scratchpad)
+
                 return observation
         return "Failed to complete the task."
 
@@ -224,4 +252,19 @@ class ControllerAgent:
         current_directory: str = self.chat_window.get_current_directory()
         return self.action_responses["current_directory"].format(
             directory_path=current_directory
+        )
+
+    def list_directory(self) -> str:
+        current_dir = self.chat_window.get_current_directory()
+        contents = self.chat_window.list_directory()
+
+        if not contents:
+            return self.action_responses["list_directory"].format(
+                current_directory=current_dir,
+                directory_contents="The current directory is empty.",
+            )
+
+        directory_contents = "\n".join(f"- {item}" for item in contents)
+        return self.action_responses["list_directory"].format(
+            current_directory=current_dir, directory_contents=directory_contents
         )
