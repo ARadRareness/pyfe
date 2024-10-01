@@ -1,3 +1,4 @@
+import os
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -6,13 +7,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QCheckBox,  # Add this import
 )
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QKeyEvent, QTextCursor  # Add this import
+from PySide6.QtCore import Qt, QThread, Signal, QFileInfo
+from PySide6.QtGui import QKeyEvent  # Add this import
 from interface.ai.openai_client import OpenAIClient
-from interface.ai.controller_agent import ControllerAgent  # Add this import
+from interface.ai.controller_agent_react import ControllerAgent  # Add this import
 from interface.constants import settings
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
     from interface.file_explorer_ui import FileExplorerUI
@@ -120,7 +121,7 @@ class ChatWindow(QWidget):
                 return True
         return super().eventFilter(obj, event)
 
-    def set_current_directory(self, folder_path: str):
+    def change_directory(self, folder_path: str):
         return self.parent.change_directory(folder_path)
 
     def go_up(self):
@@ -132,10 +133,54 @@ class ChatWindow(QWidget):
     def go_forward(self):
         return self.parent.go_forward()
 
-    def get_favorite_directories(self):
+    def get_favorite_directories(self) -> List[str]:
         if self.parent and hasattr(self.parent, "favorites_manager"):
             return self.parent.get_favorite_directories()
         return []
 
     def get_current_directory(self):
         return self.parent.get_current_directory()
+
+    def find_directory(self, search_value: str) -> List[Dict[str, str]]:
+        results = []
+        searched_paths = set()
+
+        for root_path in self.get_favorite_directories()[::-1]:
+            print("ROOT PATH: ", root_path)
+            folder_results = []
+            for root, dirs, _ in os.walk(root_path):
+                # Check if this path or any parent path has been searched
+
+                if root in searched_paths:
+                    # print("SKIPPING: ", root)
+                    continue
+
+                searched_paths.add(root)
+
+                for dir_name in dirs:
+                    if search_value.lower() in dir_name.lower() and os.path.isdir(
+                        os.path.join(root, dir_name)
+                    ):
+                        full_path = os.path.join(root, dir_name)
+                        file_info = QFileInfo(full_path)
+                        date_modified = file_info.lastModified().toString(
+                            "yyyy-MM-dd HH:mm:ss"
+                        )
+                        folder_results.append(
+                            {
+                                "name": dir_name,
+                                "path": full_path,
+                                "date_modified": date_modified,
+                            }
+                        )
+
+                        if len(folder_results) >= 10:
+                            break
+
+                if len(folder_results) >= 10:
+                    break
+
+            results.extend(folder_results)
+            if len(results) >= 10:
+                break
+        return results

@@ -47,7 +47,7 @@ def package_messages(history):
                 ),
                 Content(
                     parts=[Part.from_text(message["content"])],
-                    role=message["assistant"],
+                    role="assistant",
                 ),
             ]
         else:
