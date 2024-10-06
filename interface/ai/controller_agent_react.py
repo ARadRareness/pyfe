@@ -2,58 +2,14 @@ from interface.ai.openai_client import OpenAIClient
 from typing import List, Dict, Tuple
 from interface.constants import settings
 
-
-PROMPT_EXAMPLES = """Task: Go to the folder "hello"
-Thought 1: In order to go to the image folder, I need to first check if it exists in the current directory.
-Action 1: list_directory
-Observation 1: Current directory: C:\\current_user, Contents of the current directory:
-- image
-- documents
-- downloads
-Thought 2: The folder "hello" is not in the current directory, I therefore need to search for it, and then change the current directory to it.
-Action 2: find_directory § hello
-Observation 2: Found 1 directories containing 'hello':
-- hello (Path: C:\\hello, Modified: 2024-02-20)
-Thought 3: I have found the folder "hello", now I need to change the current directory to it.
-Action 3: change_directory § C:\\hello
-Observation 3: Successfully changed the current directory to "C:\\hello"
-Thought 4: I have successfully reached the folder "hello", I can now report this to the user.
-Action 4: answer § I have changed the current directory to the folder "hello"
-
-Task: Go up one directory
-Thought 1: In order to go up one directory, I need to use the go_up function.
-Action 1: go_up
-Observation 1: Successfully moved up one directory level, current directory: C:\\.
-Thought 2: I have successfully gone up one directory level, I can now report this to the user.
-Action 2: answer § I have gone up one directory to C:\\.
-
-Task: Go to the image folder
-Thought 1: In order to go to the image folder, I need to first check if it exists in the current directory.
-Action 1: list_directory
-Observation 1: Current directory: C:\\, Contents of the current directory:
-- image
-- documents
-- downloads
-Thought 2: The image folder exists in the current directory, I can now change to it.
-Action 2: change_directory § C:\\image
-Observation 2: Successfully changed the current directory to "C:\\image"
-Thought 3: I have successfully reached the folder "hello", I can now report this to the user.
-Action 3: answer § I have changed the current directory to the folder "C:\\hello"
-"""
-
-REACT_PROMPT = """SYSTEM PROMPT: You are an AI assistant that excels at solving problems step-by-step using available functions. Your task is to analyze the current situation and determine the next best action to take.
+REACT_PROMPT_OLD = """SYSTEM PROMPT: You are an AI assistant that excels at solving problems step-by-step using available functions. Your task is to analyze the current situation and determine the next best action to take.
 
 Given the user's task, you will provide a single Thought and Action. After each Action, you will receive an Observation, which you should use to inform your next step.
 
+{domain_specific_prompt}
+
 Available functions:
-1. find_directory search_value: Search globally for directories containing the given search value.
-2. change_directory folder_path: Change the current directory to the specified folder path. If successful, returns the new directory path.
-3. go_up: Move up one directory level. If successful, returns the new directory path.
-4. go_back: Move to the previously visited directory in the navigation history.
-5. go_forward: Move to the next directory in the navigation history, if any.
-6. current_directory: Get the current directory path.
-7. list_directory: List all files and folders in the current directory.
-8. answer (response: str): Provide a final answer to the user's task.
+{available_functions}
 
 Here are some examples:
 {examples}
@@ -66,51 +22,122 @@ Action: function_name § argument (if applicable)]
 Task: {query}{scratchpad}
 """
 
-### Future: Add {reflections} to the prompt after the EXAMPLES section, with long term memory of the reflections between solving attempts
+REACT_PROMPT = """
+## Role and Purpose
+You are an AI agent specialized in solving problems step-by-step using available functions. Your task is to analyze situations and determine the next best action to take.
+{domain_specific_prompt}
+
+## Available Functions
+{available_functions}
+
+## Examples
+{examples}
+
+## Response Format
+Provide only one thought and one action at a time, following this format:
+```
+Thought: [Your reasoning about the current situation and what to do next]
+Action: function_name § argument (if applicable)
+```
+
+## Task
+{query}{scratchpad}
+"""
+
+REACT_ANALYSIS_PROMPT = """
+## Role and Purpose
+You are an AI agent specialized in comprehensive situation analysis and problem decomposition. Your task is to analyze given scenarios and generate structured reasoning that identifies:
+- Key aspects of the current situation
+- Relevant constraints and requirements
+- Primary goals and sub-goals to achieve
+- Potential challenges or obstacles
+- Available resources and their applicability
+{domain_specific_prompt}
+
+## Available Functions
+{available_functions}
+
+## Context
+Your analysis will be used by another AI agent to determine specific actions to take. Focus on providing clear, actionable insights rather than suggesting specific functions to call.
+
+## Examples
+{examples}
+
+## Response Format
+Provide a structured analysis following this format:
+```
+Situation Analysis:
+[Describe the current state and key elements of the scenario]
+
+Goals:
+- Primary Goal: [Main objective to achieve]
+- Sub-goals:
+  1. [First sub-goal]
+  2. [Second sub-goal]
+  ...
+
+Constraints:
+- [List key limitations or requirements]
+
+Available Resources:
+- [List relevant resources and their potential uses]
+
+Key Considerations:
+- [Important factors that should influence decision-making]
+```
+
+## Task
+{query}
+"""
 
 
 class ControllerAgent:
-    def __init__(self, chat_window):
-        self.chat_window = chat_window
+    def __init__(self, domain_agent):
+        self.domain_agent = domain_agent
         self.openai_client = OpenAIClient(
             settings.value("api_key", ""),
             settings.value("custom_url", "https://api.openai.com/v1"),
         )
         self.max_actions = 10
-
         self.total_actions = 0
+        self.scratchpad = ""
+        self.initial_prompt = ""
+        # self.use_analysis = True
 
-        self.action_responses = {
-            "change_directory_no_argument": "No folder path provided.",
-            "change_directory_incorrect_path": "Failed to move to folder, is the path correct?",
-            "change_directory_success": "Successfully changed the current directory to {folder_path}",
-            "go_up_failure": "Failed to move up, are you already at the root?",
-            "go_up_success": "Successfully moved up one directory level.",
-            "go_back_failure": "Failed to navigate back, you might already be at the start of the history.",
-            "go_back_success": "Successfully navigated back to the previous directory.",
-            "go_forward_failure": "Failed to navigate forward, you might already be at the end of the history.",
-            "go_forward_success": "Successfully navigated forward to the next directory.",
-            "current_directory": "Current directory: {directory_path}",
-            "list_directory": "Current directory: {current_directory}\nContents of the current directory:\n{directory_contents}",
+    def generate_analysis(self, query: str) -> str:
+        prompt = REACT_ANALYSIS_PROMPT.format(
+            query=query,
+            examples=self.domain_agent.get_analysis_examples(),
+            available_functions=self.domain_agent.get_available_functions(),
+            domain_specific_prompt=self.domain_agent.get_domain_specific_analysis_prompt(),
+        )
+
+        user_message = {
+            "role": "user",
+            "content": prompt,
         }
 
-        self.scratchpad = """
-        Thought 1: In order to go up a directory, I need to use the go_up function.
-        Action 1: go_up
-        Observation 1: Successfully moved up one directory level, current directory: C:\\yarr.
-"""
+        prompt_history = [user_message]
+        raw_response = self.openai_client.chat_completion(prompt_history)
+        response = raw_response["choices"][0]["message"]["content"]
+
+        return response
 
     def retrieve_action(
         self, query: str, scratchpad: str, step_count: int
     ) -> Tuple[str, str]:
-
         prompt = REACT_PROMPT.format(
             query=query,
-            examples=PROMPT_EXAMPLES,
+            examples=self.domain_agent.get_examples(),
+            available_functions=self.domain_agent.get_available_functions(),
+            domain_specific_prompt=self.domain_agent.get_domain_specific_prompt(),
             scratchpad=scratchpad
             + f"\n\nWhat's your thought {step_count} and action {step_count}?",
             step_count=step_count,
         )
+
+        if not self.initial_prompt:
+            self.initial_prompt = prompt
 
         user_message = {
             "role": "user",
@@ -133,138 +160,40 @@ class ControllerAgent:
             if line.lower().startswith("thought"):
                 thought = line.split(":", 1)[1].strip()
             elif line.lower().startswith("action"):
-                action = line.split(":", 1)[1].strip()
+                action = line.split(":", 1)[1].strip().replace("`", "")
 
         return thought, action
 
     def perform_action(self, action: str) -> Tuple[str, bool]:
-        s = action.split("§")
-        if len(s) == 2:
-            function, argument = s
-            function = function.strip()
-            argument = argument.strip()
-        else:
-            function = s[0].strip()
-            argument = ""
-
-        if function == "find_directory":
-            return self.find_directory(argument), False
-        elif function == "change_directory":
-            return self.change_directory(argument), False
-        elif function == "go_up":
-            return self.go_up(), False
-        elif function == "go_back":
-            return self.go_back(), False
-        elif function == "go_forward":
-            return self.go_forward(), False
-        elif function == "current_directory":
-            return self.current_directory(), False
-        elif function == "answer":
-            return argument, True
-        elif function == "list_directory":
-            return self.list_directory(), False
-        else:
-            print(f"Warning: Unknown action ({function}) was provided.")
-            return f"Unknown action: {function}", True
+        return self.domain_agent.perform_action(action)
 
     def process_query(
         self, query: str, chat_history: List[Dict[str, str]], max_actions: int = 5
     ) -> str:
-        # plan = self.create_plan(query, chat_history)
-
-        # for i in range(self.max_actions):
-        scratchpad = ""
+        self.scratchpad = ""
         self.total_actions = 0
 
+        # if self.use_analysis:
+        #    self.scratchpad = "\n" + self.generate_analysis(query) + "\n"
+
         for i in range(1, self.max_actions + 1):
-            thought, action = self.retrieve_action(query, scratchpad, i)
-            scratchpad += f"Thought {i}: {thought}\nAction {i}: {action}\n"
+            thought, action = self.retrieve_action(query, self.scratchpad, i)
+            self.scratchpad += f"Thought {i}: {thought}\nAction {i}: {action}\n"
             observation, is_final = self.perform_action(action)
             self.total_actions += 1
 
             if not is_final:
-                scratchpad += f"Observation {i}: {observation}\n"
-                print("SCRATCHPAD:", scratchpad)
+                self.scratchpad += f"Observation {i}: {observation}\n"
+                # print("SCRATCHPAD:", self.scratchpad)
             else:
-                print(observation, is_final)
-                print("SCRATCHPAD:", scratchpad)
-
+                # print(observation, is_final)
+                # print("SCRATCHPAD:", self.scratchpad)
                 return observation
+
         return "Failed to complete the task."
 
-    def find_directory(self, search_value: str) -> str:
-        if not search_value:
-            return "No search value provided"
+    def get_initial_prompt(self) -> str:
+        return self.initial_prompt
 
-        results: List[Dict[str, str]] = self.chat_window.find_directory(search_value)
-
-        return self.get_find_directory_message(search_value, results)
-
-    def get_find_directory_message(
-        self, search_value: str, results: List[Dict[str, str]]
-    ) -> str:
-        if not results:
-            return f"No directories found containing '{search_value}'"
-
-        result_str = f"Found {len(results)} directories containing '{search_value}':\n"
-        for result in results:
-            result_str += f"- {result['name']} (Path: {result['path']}, Modified: {result['date_modified']})\n"
-
-        return result_str
-
-    def find_file(self, search_value: str) -> str:
-        if not search_value:
-            return "No search value provided"
-
-        # Dummy implementation
-        return f"Found file: {search_value}.txt"
-
-    def change_directory(self, folder_path: str) -> str:
-        if not folder_path:
-            return self.action_responses["change_directory_no_argument"]
-
-        if self.chat_window.change_directory(folder_path):
-            return self.action_responses["change_directory_success"].format(
-                folder_path=folder_path
-            )
-        else:
-            return self.action_responses["change_directory_incorrect_path"]
-
-    def go_up(self) -> str:
-        if self.chat_window.go_up():
-            return self.action_responses["go_up_success"]
-        else:
-            return self.action_responses["go_up_failure"]
-
-    def go_back(self) -> str:
-        if self.chat_window.go_back():
-            return self.action_responses["go_back_success"]
-        else:
-            return self.action_responses["go_back_failure"]
-
-    def go_forward(self) -> str:
-        if self.chat_window.go_forward():
-            return self.action_responses["go_forward_success"]
-        else:
-            return self.action_responses["go_forward_failure"]
-
-    def current_directory(self) -> str:
-        current_directory: str = self.chat_window.get_current_directory()
-        return self.action_responses["current_directory"].format(
-            directory_path=current_directory
-        )
-
-    def list_directory(self) -> str:
-        current_dir = self.chat_window.get_current_directory()
-        contents = self.chat_window.list_directory()
-
-        if not contents:
-            return self.action_responses["list_directory"].format(
-                current_directory=current_dir,
-                directory_contents="The current directory is empty.",
-            )
-
-        directory_contents = "\n".join(f"- {item}" for item in contents)
-        return self.action_responses["list_directory"].format(
-            current_directory=current_dir, directory_contents=directory_contents
-        )
+    def get_scratchpad(self) -> str:
+        return self.scratchpad
