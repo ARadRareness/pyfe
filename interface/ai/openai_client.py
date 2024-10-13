@@ -8,6 +8,7 @@ class OpenAIClient:
         self.base_url = base_url
         self.audio = Audio(self)
         self.images = Images(self)
+        self.models = Models(self)
 
     def check_api_access(self, parent):
         print(self.base_url, self.api_key)
@@ -41,6 +42,63 @@ class Audio:
         self.client = client
         self.speech = Speech(client)
         self.transcriptions = Transcriptions(client)
+
+
+class Models:
+    def __init__(self, client):
+        self.client = client
+
+    def list(self):
+        response = requests.get(f"{self.client.base_url}/models")
+        json_response = response.json()
+
+        # Convert the response to match OpenAI's structure
+        models = []
+        for item in json_response.get("data", []):
+            model = Model(
+                id=item["id"],
+                created=item["created"],
+                object="model",
+                owned_by="system",
+            )
+            models.append(model)
+
+        return SyncPage(data=models, object="list")
+
+
+class Model:
+    def __init__(self, id, created, object, owned_by):
+        self.id = id
+        self.created = created
+        self.object = object
+        self.owned_by = owned_by
+
+    def __str__(self):
+        return f"Model(id='{self.id}', created={self.created}, object='{self.object}', owned_by='{self.owned_by}')"
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class SyncPage:
+    def __init__(self, data, object):
+        self.data = data
+        self.object = object
+
+    def __str__(self):
+        return f"SyncPage[Model](data={self.data}, object='{self.object}')"
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __iter__(self):
+        return iter(self.data)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, index):
+        return self.data[index]
 
 
 class Transcriptions:
