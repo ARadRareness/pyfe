@@ -2,25 +2,6 @@ from interface.ai.openai_client import OpenAIClient
 from typing import List, Dict, Tuple
 from interface.constants import settings
 
-REACT_PROMPT_OLD = """SYSTEM PROMPT: You are an AI assistant that excels at solving problems step-by-step using available functions. Your task is to analyze the current situation and determine the next best action to take.
-
-Given the user's task, you will provide a single Thought and Action. After each Action, you will receive an Observation, which you should use to inform your next step.
-
-{domain_specific_prompt}
-
-Available functions:
-{available_functions}
-
-Here are some examples:
-{examples}
-(END OF EXAMPLES)
-
-Provide only one thought and one action, following this format:
-Thought: [Your reasoning about the current situation and what to do next]
-Action: function_name § argument (if applicable)]
-
-Task: {query}{scratchpad}
-"""
 
 REACT_PROMPT = """
 ## Role and Purpose
@@ -92,13 +73,13 @@ Key Considerations:
 
 
 class ControllerAgent:
-    def __init__(self, domain_agent):
+    def __init__(self, domain_agent, max_actions: int = 10):
         self.domain_agent = domain_agent
         self.openai_client = OpenAIClient(
             settings.value("api_key", ""),
             settings.value("custom_url", "https://api.openai.com/v1"),
         )
-        self.max_actions = 10
+        self.max_actions = max_actions
         self.total_actions = 0
         self.scratchpad = ""
         self.initial_prompt = ""
@@ -168,7 +149,8 @@ class ControllerAgent:
         return self.domain_agent.perform_action(action)
 
     def process_query(
-        self, query: str, chat_history: List[Dict[str, str]], max_actions: int = 5
+        self,
+        query: str,
     ) -> str:
         self.scratchpad = ""
         self.total_actions = 0
@@ -184,10 +166,7 @@ class ControllerAgent:
 
             if not is_final:
                 self.scratchpad += f"Observation {i}: {observation}\n"
-                # print("SCRATCHPAD:", self.scratchpad)
             else:
-                # print(observation, is_final)
-                # print("SCRATCHPAD:", self.scratchpad)
                 return observation
 
         return "Failed to complete the task."

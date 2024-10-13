@@ -135,7 +135,7 @@ list the contents of a directory, run applications, and provide a final answer t
             return self.run_application(argument), False
         else:
             print(f"Warning: Unknown action ({function}) was provided.")
-            return f"Unknown action: {function}", True
+            return f"Unknown action: {function}", False
 
     def find_directory(self, search_value: str) -> str:
         if not search_value:

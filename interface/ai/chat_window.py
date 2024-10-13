@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QThread, Signal, QFileInfo
 from PySide6.QtGui import QKeyEvent  # Add this import
+from interface.ai.computer_agent import ComputerAgent
 from interface.ai.openai_client import OpenAIClient
 from interface.ai.controller_agent_react import ControllerAgent  # Add this import
 from interface.constants import settings
@@ -73,7 +74,8 @@ class ChatWindow(QWidget):
 
         self.messages = []
 
-        self.controller_agent = ControllerAgent(self)  # Add this line
+        self.computer_agent = ComputerAgent(self)
+        self.controller_agent = ControllerAgent(self.computer_agent)
 
     def send_message(self):
         user_message = self.user_input.toPlainText().strip()
@@ -90,7 +92,7 @@ class ChatWindow(QWidget):
                 self.response_thread.start()
 
     def handle_controller_agent(self, user_message):
-        response = self.controller_agent.process_query(user_message, self.messages)
+        response = self.controller_agent.process_query(user_message)
         self.handle_ai_response(response)
 
     def handle_ai_response(self, ai_message):
