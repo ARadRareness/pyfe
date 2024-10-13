@@ -3,9 +3,10 @@ from tests.agent_benchmark.computer_simulation.test_computer import Computer
 
 
 class Case003Computer(Computer):
-    def __init__(self):
+    def __init__(self, test_query: str):
         super().__init__()
-        self.test_query = "You are using a custom operating system where all applications are stored in C:\\applications. Start by listing your current directory. Shutdown the computer."
+        self.description = "Shutdown using shutdown_computer.exe with arguments"
+        self.test_query = test_query
         self.files = {
             "C:\\": {
                 "name": "C:",

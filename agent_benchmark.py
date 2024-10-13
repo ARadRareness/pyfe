@@ -1,5 +1,6 @@
 import time
 import os
+import shutil
 from datetime import datetime
 from jinja2 import Template
 from interface.ai.computer_agent import ComputerAgent
@@ -7,17 +8,27 @@ from interface.ai.controller_agent_react import ControllerAgent
 from tests.agent_benchmark.computer_simulation.case_001 import Case001Computer
 from tests.agent_benchmark.computer_simulation.case_002 import Case002Computer
 from tests.agent_benchmark.computer_simulation.case_003 import Case003Computer
+from tests.agent_benchmark.computer_simulation.case_004 import Case004Computer
+from tests.agent_benchmark.computer_simulation.case_005 import Case005Computer
 
 
 class Benchmark:
     def __init__(self, num_runs: int):
         self.num_runs = num_runs
-        # self.cases = [Case001Computer(), Case002Computer(), Case003Computer()]
-        self.cases = [Case002Computer()]
+        self.test_query = "You are in a computer simulation. All available commands are in the applications folder. Using that information, shutdown the computer."
+        self.cases = [
+            Case001Computer(self.test_query),
+            Case002Computer(self.test_query),
+            Case003Computer(self.test_query),
+            Case004Computer(self.test_query),
+            Case005Computer(self.test_query),
+        ]
+        # self.cases = [Case005Computer(self.test_query)]
         self.results = []
         # Create benchmark directory
         self.benchmark_dir = self.create_benchmark_directory()
         self.agent = None  # Add this line to store the agent instance
+        self.max_actions = 20
 
     def create_benchmark_directory(self):
         # Create benchmarks directory if it doesn't exist
@@ -28,12 +39,14 @@ class Benchmark:
         now = datetime.now()
         dir_name = now.strftime("benchmark_%Y%m%d%H%M")
         benchmark_dir = os.path.join("benchmarks", dir_name)
+
+        if os.path.exists(benchmark_dir):
+            shutil.rmtree(benchmark_dir)
         os.makedirs(benchmark_dir)
         return benchmark_dir
 
     def run(self):
         # Save initial prompt once per benchmark
-        self.agent = ControllerAgent(ComputerAgent(self.cases[0]))
 
         for computer in self.cases:
             case_results = []
@@ -43,11 +56,15 @@ class Benchmark:
             for run_number in range(self.num_runs):
                 computer.reset_computer()
                 computer_agent = ComputerAgent(computer)
-                self.agent = ControllerAgent(computer_agent)
+                self.agent = ControllerAgent(
+                    computer_agent, max_actions=self.max_actions
+                )
 
                 start_time = time.time()
-                self.agent.process_query(computer.test_query, [])
+                self.agent.process_query(computer.test_query)
                 end_time = time.time()
+
+                # print(self.agent.get_scratchpad())
 
                 success = computer.test_completed()
                 steps = self.agent.total_actions
@@ -70,6 +87,7 @@ class Benchmark:
             self.results.append(
                 {
                     "case_name": computer.__class__.__name__.replace("Computer", ""),
+                    "description": computer.description,
                     "query": computer.test_query,
                     "runs": case_results,
                 }
@@ -128,6 +146,7 @@ class Benchmark:
                 th { background-color: #f2f2f2; }
                 .success { color: green; }
                 .failure { color: red; }
+                a { text-decoration: none; color: inherit; }
             </style>
         </head>
         <body>
@@ -135,6 +154,7 @@ class Benchmark:
             <h2>Overall Score: {{ "%.2f"|format(score) }}%</h2>
             {% for case in results %}
             <h3>{{ case.case_name }} ({{ "%.2f"|format(case.success_rate) }}%)</h3>
+            <p>{{ case.description }}</p>
             <p>Query: {{ case.query }}</p>
             <table>
                 <tr>
@@ -147,7 +167,9 @@ class Benchmark:
                 <tr>
                     <td>{{ loop.index }}</td>
                     <td class="{{ 'success' if run.success else 'failure' }}">
-                        {{ 'Success' if run.success else 'Failure' }}
+                        <a href="{{ run.scratchpad_link }}" target="_blank">
+                            {{ 'Success' if run.success else 'Failure' }}
+                        </a>
                     </td>
                     <td>{{ run.steps }}</td>
                     <td>{{ "%.2f"|format(run.duration) }}</td>
@@ -160,10 +182,19 @@ class Benchmark:
         """
         )
 
-        # Calculate success rate for each case
+        # Calculate success rate for each case and add scratchpad links
         for case in self.results:
             successful_runs = sum(run["success"] for run in case["runs"])
             case["success_rate"] = (successful_runs / len(case["runs"])) * 100
+
+            for i, run in enumerate(case["runs"]):
+                scratchpad_filename = (
+                    f"case_run_{i + 1}_{'success' if run['success'] else 'failure'}.txt"
+                )
+                # Use the full case name (e.g., Case005Computer) for the directory
+                run["scratchpad_link"] = os.path.join(
+                    case["case_name"] + "Computer", scratchpad_filename
+                )
 
         report = template.render(results=self.results, score=score)
         report_path = os.path.join(self.benchmark_dir, "benchmark_report.html")
